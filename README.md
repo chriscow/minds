@@ -17,9 +17,8 @@ well as a suite of tools in the `minds/openai`, `minds/gemini`, and
 ## Features
 
 - **Composable Middleware**: Build complex pipelines for handling message threads with composable, reusable handlers.
-- **Scripting Support**: Evaluate mathematical expressions and scripts with support for Starlark and Lua.
 - **Extensible Design**: Add custom handlers and integrate external APIs with ease.
-- **Integration Tools**: Built-in support for LLM providers and services like SerpAPI for search and generative AI workflows.
+- **Integration Tools**: Built-in support for LLM providers and tools for generative AI workflows.
 - **Testing-Friendly**: Well-structured interfaces and unit-tested components for robust development.
 
 ## Installation
@@ -48,53 +47,97 @@ import (
 	"github.com/chriscow/minds"
 	"github.com/chriscow/minds/gemini"
 	"github.com/chriscow/minds/handlers"
+	"github.com/chriscow/minds/openai"
 )
 
+const prompt = "What is the meaning of life?"
+
+// This example demonstrates how to compose multiple handlers into a single pipeline
+// using the familiar "middleware" pattern of Go's `net/http` package.
 func main() {
 	if os.Getenv("GEMINI_API_KEY") == "" {
-		log.Fatal("GEMINI_API_KEY is not set")
+		log.Fatalf("GEMINI_API_KEY is not set")
 	}
 
 	ctx := context.Background()
-	client, err := gemini.NewClient(ctx, os.Getenv("GEMINI_API_KEY"))
+
+    // ContentGenerator providers implement the ThreadHandler interface
+	llm, err := gemini.NewProvider(ctx)
 	if err != nil {
-		log.Fatalf("Failed to create Gemini client: %v", err)
+		log.Fatalf("failed to create LLM provider: %v", err)
 	}
+	runPipeline(ctx, llm)
 
-	llm, err := gemini.NewProvider(client)
+    // Try it with OpenAI ...
+	llm, err := openai.NewProvider()
 	if err != nil {
-		log.Fatalf("Failed to create Gemini provider: %v", err)
+		log.Fatalf("failed to create LLM provider: %v", err)
 	}
+	runPipeline(ctx, llm)
+}
 
-	// Compose a simple handler pipeline
-	pipeline := handlers.Sequential("pipeline", "simple pipeline",
-		printThreadHandler(),
-		llm,
-		finalHandler(),
-	)
+func runPipeline(ctx context.Context, llm minds.ThreadHandler) {
+	// Compose the handlers into a single pipeline.
+	// The pipeline is an ordered list of handlers that each process the thread in some way.
+	// The final handler in the pipeline is responsible for handling the final result.
+	pipeline := handlers.Sequential("pipeline", exampleHandler(), llm) // Add more handlers ...
+	pipeline.Use(validateMiddlware())
 
-	// Initial thread
-	thread := minds.NewThreadContext(nil, minds.NewMessageThread(nil, []minds.Message{
-		{Role: minds.RoleUser, Content: "What is the meaning of life?"},
-	}))
+	// Initial message thread to start things off
+	initialThread := minds.NewThreadContext(ctx).WithMessages(minds.Messages{
+		{Role: minds.RoleUser, Content: prompt},
+	})
+
+	// Final handler (end of the pipeline)
+	finalHandler := minds.ThreadHandlerFunc(func(tc minds.ThreadContext, next minds.ThreadHandler) (minds.ThreadContext, error) {
+		fmt.Println("[finalHandler]: \n\n" + tc.Messages().Last().Content)
+		return tc, nil
+	})
 
 	// Execute the pipeline
-	if err := pipeline.HandleThread(ctx, thread, nil); err != nil {
-		log.Fatalf("Pipeline failed: %v", err)
+	if _, err := pipeline.HandleThread(initialThread, finalHandler); err != nil {
+		log.Fatalf("Handler chain failed: %v", err)
 	}
 }
 
-func printThreadHandler() minds.ThreadHandlerFunc {
-	return func(ctx context.Context, tc minds.ThreadContext, next minds.ThreadHandler) error {
-		fmt.Printf("User said: %s\n", tc.Thread().LastMessage().Content)
-		return next.HandleThread(ctx, tc, next)
+func exampleHandler() minds.ThreadHandlerFunc {
+	return func(tc minds.ThreadContext, next minds.ThreadHandler) (minds.ThreadContext, error) {
+		fmt.Println("[exampleHandler]")
+
+		//
+		// Pass the tread to the next handler in the chain
+		//
+		if next != nil {
+			return next.HandleThread(tc, nil)
+		}
+
+		return tc, nil
 	}
 }
 
-func finalHandler() minds.ThreadHandlerFunc {
-	return func(ctx context.Context, tc minds.ThreadContext, _ minds.ThreadHandler) error {
-		fmt.Printf("Assistant replied: %s\n", tc.Thread().LastMessage().Content)
-		return nil
+// Middleware are ThreadHandlers like any other, but they are used to wrap other handlers
+// to provide additional functionality, such as validation, logging, or error handling.
+func validateMiddlware() minds.ThreadHandlerFunc {
+	return func(tc minds.ThreadContext, next minds.ThreadHandler) (minds.ThreadContext, error) {
+		if len(tc.Messages()) == 0 {
+			return tc, fmt.Errorf("thread has no messages")
+		}
+
+		// TODO: validate the input thread before processing
+		fmt.Println("[validator in] Validated thread before processing")
+
+		if next != nil {
+			var err error
+			tc, err = next.HandleThread(tc, nil)
+			if err != nil {
+				return tc, err
+			}
+		}
+
+		// TODO: validate the output thread after processing
+		fmt.Println("[validator out] Validated thread after processing")
+
+		return tc, nil
 	}
 }
 ```
@@ -135,6 +178,3 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 This project is inspired by the `http.Handler` middleware pattern and the need for modular and extensible LLM application development in Go.
 
----
-
-This draft provides an overview of the project, showcases its capabilities with examples, and offers practical installation and usage details. Let me know if you'd like adjustments!
