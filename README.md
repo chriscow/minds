@@ -164,7 +164,7 @@ func main() {
 
 ## Documentation
 
-Refer to the [documentation](https://github.com/chriscow/minds/docs) for detailed guides and API references.
+Refer to the `_examples` provided for guidance on how to use the modules.
 
 ## Contributing
 
