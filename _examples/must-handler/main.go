@@ -10,12 +10,9 @@ import (
 	"github.com/chriscow/minds/providers/openai"
 )
 
-// The example demonstrates the map and reduce handlers.
-//
-// MapHandler: The map handler executes multiple handlers in parallel.
-//
-// ReduceHandler: The reduce handler combines the results of the many handlers
-// into a single output using an LLM.
+// The example demonstrates the must handler. The `must` handler ensures that all
+// provided handlers succeed in parallel. If any handler fails, the others are
+// canceled, and the first error is returned.
 func main() {
 	ctx := context.Background()
 	llm, err := newGemini(ctx)
@@ -24,7 +21,10 @@ func main() {
 		panic(err)
 	}
 
-	validationPipeline := validationHandler(llm)
+	// This sets up a pipeline that validates messages for dad jokes, coffee
+	// obsession, and unnecessary jargon in parallel using the `must` handler.
+	// If any of the validators fail, the others are canceled.
+	validationPipeline := validationPipeline(llm)
 
 	//
 	// Some example message threads to test the validation pipeline
@@ -87,7 +87,7 @@ func newOpenAI() (minds.ContentGenerator, error) {
 	return openai.NewProvider()
 }
 
-func validationHandler(llm minds.ContentGenerator) minds.ThreadHandler {
+func validationPipeline(llm minds.ContentGenerator) minds.ThreadHandler {
 	// Create policy validators with humorous but detectable rules
 	validators := []minds.ThreadHandler{
 		handlers.PolicyValidator(
