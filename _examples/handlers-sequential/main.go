@@ -14,8 +14,9 @@ import (
 
 const prompt = "What is the meaning of life?"
 
-// This example demonstrates how to compose multiple handlers into a single pipeline
-// using the familiar "middleware" pattern of Go's `net/http` package.
+// This example demonstrates the `Sequential` handler.  The `Sequential` handler
+// executes each handler in order. Here we compose multiple handlers into a
+// single pipeline.
 func main() {
 	if os.Getenv("GEMINI_API_KEY") == "" {
 		log.Fatalf("GEMINI_API_KEY is not set")
@@ -34,7 +35,7 @@ func runPipeline(ctx context.Context, llm minds.ThreadHandler) {
 	// Compose the handlers into a single pipeline.
 	// The pipeline is an ordered list of handlers that each process the thread in some way.
 	// The final handler in the pipeline is responsible for handling the final result.
-	pipeline := handlers.Sequential("pipeline", exampleHandler(), llm)
+	pipeline := handlers.Sequential("pipeline", firstHandler(), llm)
 	pipeline.Use(validateMiddlware())
 
 	// Initial message thread to start things off
@@ -54,7 +55,7 @@ func runPipeline(ctx context.Context, llm minds.ThreadHandler) {
 	}
 }
 
-func exampleHandler() minds.ThreadHandlerFunc {
+func firstHandler() minds.ThreadHandlerFunc {
 	return func(tc minds.ThreadContext, next minds.ThreadHandler) (minds.ThreadContext, error) {
 		fmt.Println("[exampleHandler]")
 

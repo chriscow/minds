@@ -10,9 +10,12 @@ import (
 	"github.com/chriscow/minds/providers/openai"
 )
 
-// The example demonstrates the must handler. The `must` handler ensures that all
-// provided handlers succeed in parallel. If any handler fails, the others are
-// canceled, and the first error is returned.
+// The example demonstrates the must handler. The `Must` handler executes all
+// handlers in parallel. It ensures that all handlers succeed. If any handler
+// fails, the others are canceled, and the first error is returned.
+//
+// This is useful for policy enforcement where multiple validators must pass
+// before the next handler is executed.
 func main() {
 	ctx := context.Background()
 	llm, err := newGemini(ctx)
