@@ -53,14 +53,13 @@ func (r *RateLimiter) HandleThread(tc minds.ThreadContext, next minds.ThreadHand
 }
 
 func main() {
-	var err error
 	ctx := context.Background()
-	llm1, err := gemini.NewProvider(ctx)
+	geminiJoker, err := gemini.NewProvider(ctx)
 	if err != nil {
 		log.Fatalf("Error creating Gemini provider: %v", err)
 	}
 
-	llm2, err := openai.NewProvider()
+	openAIJoker, err := openai.NewProvider()
 	if err != nil {
 		log.Fatalf("Error creating OpenAI provider: %v", err)
 	}
@@ -68,69 +67,30 @@ func main() {
 	// Create a rate limiter that allows 1 request every 5 seconds
 	limiter := NewRateLimiter("rate_limiter", 1, 5*time.Second)
 
-	// Create handlers for each LLM
-	geminiJoker := minds.ThreadHandlerFunc(func(tc minds.ThreadContext, next minds.ThreadHandler) (minds.ThreadContext, error) {
-		// Add prompt for joke response
-		messages := tc.Messages()
-		messages = append(messages, &minds.Message{
-			Role:    minds.RoleUser,
-			Content: "Respond to the previous joke with a funnier joke. Do not give away the answer unless they give up. Keep it clean and family-friendly.",
-		})
-
-		// Process with Gemini
-		tc, err := llm1.HandleThread(tc.WithMessages(messages), nil)
-		if err != nil {
-			return tc, err
-		}
-
-		// Print Gemini's joke
-		fmt.Printf("Gemini: %s\n", tc.Messages().Last().Content)
-
-		// Pass to next handler
-		if next != nil {
-			return next.HandleThread(tc, nil)
-		}
+	printJoke := minds.ThreadHandlerFunc(func(tc minds.ThreadContext, next minds.ThreadHandler) (minds.ThreadContext, error) {
+		fmt.Printf("Joke: %s\n", tc.Messages().Last().Content)
 		return tc, nil
 	})
 
-	openAIJoker := minds.ThreadHandlerFunc(func(tc minds.ThreadContext, next minds.ThreadHandler) (minds.ThreadContext, error) {
-		// Add prompt for joke response
-		messages := tc.Messages()
-		messages = append(messages, &minds.Message{
-			Role:    minds.RoleUser,
-			Content: "That's a good one! Now respond with an even funnier joke. Do not give away the answer unless they give up. Keep it clean and family-friendly.",
-		})
+	// Create a cycle that alternates between both LLMs, each followed by printing the joke
+	jokeExchange := handlers.Cycle("joke_exchange", 5,
+		geminiJoker,
+		printJoke,
+		openAIJoker,
+		printJoke,
+	)
+	jokeExchange.Use(limiter)
 
-		// Process with OpenAI
-		tc, err := llm2.HandleThread(tc.WithMessages(messages), nil)
-		if err != nil {
-			return tc, err
-		}
-
-		// Print OpenAI's joke
-		fmt.Printf("OpenAI: %s\n", tc.Messages().Last().Content)
-
-		// Pass to next handler (which will be Gemini again)
-		if next != nil {
-			return next.HandleThread(tc, nil)
-		}
-		return tc, nil
-	})
-
-	circular := handlers.Sequential("ping_pong", geminiJoker, openAIJoker)
-	circular.Use(limiter)
-
-	// Start with an initial joke to get the ball rolling
+	// Initial prompt
 	initialThread := minds.NewThreadContext(ctx).WithMessages(minds.Messages{
-		{Role: minds.RoleUser, Content: "Tell me a clean, family-friendly joke to start our joke-telling competition."},
+		{
+			Role:    minds.RoleUser,
+			Content: "Tell me a clean, family-friendly joke. Keep it clean and make me laugh!",
+		},
 	})
 
-	// Run for 5 rounds (10 jokes total)
-	for i := 0; i < 5; i++ {
-		fmt.Printf("\nRound %d:\n", i+1)
-		initialThread, err = circular.HandleThread(initialThread, nil)
-		if err != nil {
-			log.Fatalf("Error in joke exchange: %v", err)
-		}
+	// Let them exchange jokes until context is canceled
+	if _, err := jokeExchange.HandleThread(initialThread, nil); err != nil {
+		log.Fatalf("Error in joke exchange: %v", err)
 	}
 }

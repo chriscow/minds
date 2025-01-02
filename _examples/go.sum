@@ -20,6 +20,8 @@ github.com/chriscow/minds v0.0.0-20241230180205-40ba54528956 h1:msjEM211G3/ICpGL
 github.com/chriscow/minds v0.0.0-20241230180205-40ba54528956/go.mod h1:mFbZsJhKxEpSeuN1zfRt9V8djEa7MTwOxnerpfoJm/k=
 github.com/chriscow/minds v0.0.1 h1:I1IasoVj7uT9ayaVcBtnBRehjNhrYWppteREfkqtzSQ=
 github.com/chriscow/minds v0.0.1/go.mod h1:mFbZsJhKxEpSeuN1zfRt9V8djEa7MTwOxnerpfoJm/k=
+github.com/chriscow/minds v0.0.2 h1:KCsL4syNpi2HVT5o28zmLTmYvWUHhnloC2WlQ/aNGZ4=
+github.com/chriscow/minds v0.0.2/go.mod h1:mFbZsJhKxEpSeuN1zfRt9V8djEa7MTwOxnerpfoJm/k=
 github.com/chriscow/minds/providers/gemini v0.0.2 h1:EyFvexmViRTG03uh2ijhrPdUg9BSnRv47iJSR4YJ65I=
 github.com/chriscow/minds/providers/gemini v0.0.2/go.mod h1:ENqvg8LPEi0KIaEq6hTjpTV6DM6zzAKxNcP4fmXfljk=
 github.com/chriscow/minds/providers/openai v0.0.2 h1:VWN4wtaqqffb0BDyDCIOcK+KCQb+fm+tVY+E76eNHYE=

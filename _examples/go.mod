@@ -16,7 +16,7 @@ require (
 	cloud.google.com/go/auth/oauth2adapt v0.2.6 // indirect
 	cloud.google.com/go/compute/metadata v0.6.0 // indirect
 	cloud.google.com/go/longrunning v0.6.3 // indirect
-	github.com/chriscow/minds v0.0.1 // indirect
+	github.com/chriscow/minds v0.0.2 // indirect
 	github.com/chriscow/minds/providers/gemini v0.0.2 // indirect
 	github.com/chriscow/minds/providers/openai v0.0.2 // indirect
 	github.com/chriscow/minds/tools v0.0.1 // indirect
