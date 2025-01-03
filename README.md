@@ -23,8 +23,6 @@ well as a suite of tools in the `minds/openai`, `minds/gemini`, and
 
 ## Installation
 
-Use `go get` to install the library:
-
 ```bash
 go get github.com/chriscow/minds
 ```
@@ -44,11 +42,35 @@ Similarly, tools are available as separate modules:
 go get github.com/chriscow/minds/tools
 ```
 
+Since the examples have many dependencies, you should:
+
+```bash
+cd _examples
+go mod tidy
+go run ./chat-completion-provider/
+```
+
 ## Usage
 
 ### Basic Example
 
-Here’s how you can compose handlers for processing a thread:
+Here’s how you can compose handlers for processing a thread. This demonstrates a Joke Competition where two LLMs battle it out telling jokes to each other. We use the `For` handler to limit the number of rounds to 5.  See the `_examples/middleware-ratelimit` example for the full code.
+
+```mermaid
+---
+title: Joke Competition
+config:
+ look: handDrawn
+---
+flowchart TD
+A[Initial Message] --> |HandleThread| FOR("`**For** _handler_`")
+FOR --> C{i < 5}
+C -->|False| Next[Next Handler]
+C -->|True| D[Gemini]
+D -->|Joke| F[OpenAI]
+F -->|Joke 2| C
+```
+
 
 ```go
 func main() {
@@ -88,18 +110,17 @@ func main() {
 
 ### Adding a Calculator Tool
 
-The library supports Lua and Starlark for mathematical operations. Here's how to integrate a calculator:
+The library supports Lua and Starlark as tools for LLMs to perform mathematical operations. Here's how to integrate a calculator:
 
 ```go
 func main() {
-	const prompt = "calculate 3+7*4"
 	calc, _ := calculator.NewCalculator(calculator.Starlark)
 	req := minds.Request{
-		Messages: minds.Messages{{Role: minds.RoleUser, Content: prompt}},
+		Messages: minds.Messages{{Role: minds.RoleUser, Content: "calculate 3+7*4"}},
 	}
 
-	provider, _ := openai.NewProvider(openai.WithTool(calc))
-	resp, _ := provider.GenerateContent(ctx, req)
+	llm, _ := openai.NewProvider(openai.WithTool(calc))
+	resp, _ := llm.GenerateContent(ctx, req)
 	print(resp.Text())
 }
 ```
@@ -108,30 +129,66 @@ func main() {
 
 Refer to the `_examples` provided for guidance on how to use the modules.
 
-
 ## Handler Examples
 
-The library provides composable handlers that can be chained together in various ways:
+The Minds toolkit uses composable handlers that implement the `ThreadHandler` interface:
+
+```go
+type ThreadHandler interface {
+    HandleThread(ThreadContext, ThreadHandler) (ThreadContext, error) 
+}
+```
+
+Handlers can include middleware through the `Use()` method, allowing for cross-cutting concerns like logging, rate limiting, or validation:
+
+```go
+limiter := NewRateLimiter(1, 5*time.Second)
+handler := Sequential("example",
+    validateHandler,
+    llmHandler,
+)
+handler.Use(limiter) // Apply rate limiting to all handlers in sequence
+```
+
+The core handler types include:
+
+- **Sequential**: Runs a set of handlers in order
+- **For**: Repeats a handler chain for a specified number of iterations
+- **Must**: Runs multiple handlers in parallel, requiring all to succeed
+- **First**: Executes handlers in parallel, using the first successful result
+- **Range**: Processes a sequence of values through a handler chain
+- **Policy**: Uses LLM to validate thread content against policies
+
+The following examples demonstrate some common handler composition patterns...
 
 ### Parallel Validation 
+All handlers will be executed in parallel and must all succeed otherwise an error is returned.
 ```go
 validate := handlers.Must("validation",
-    handlers.NewFormatValidator(),      // you provide this validator
-    handlers.NewLengthValidator(1000),  // you provide this validator
-    handlers.NewContentScanner(),       // you provide this validator
+    handlers.NewFormatValidator(),      // you provide these handlers
+    handlers.NewLengthValidator(1000),  // ...
+    handlers.NewContentScanner(),       // ...
 )
 ```
 
 ```mermaid
+---
+title: Validation in Parallel
+config:
+ look: handDrawn
+---
 graph TD
-    A{Must}
-    B --> C1[Validate Format]
-    B --> C2[Check Length]
-    B --> C3[Scan Content]
+    B{Must}
+    B -->|Parallel| C1[Validate Format]
+    B -->|Parallel| C2[Check Length]
+    B -->|Parallel| C3[Scan Content]
 ```
 
 
 ### Fallback Processing
+
+All handlers executed in parallel. First handler to succceed cancels all others.
+
 ```go
 gpt4 := openai.NewProvider()
 claude := anthropic.NewProvider()
@@ -141,17 +198,51 @@ gemini := gemini.NewProvider()
 first := handlers.First("generate", gpt4, claude, gemini)
 ```
 
+```mermaid
+---
+title: Fastest Result
+config:
+ look: handDrawn
+---
+graph TD
+D{First}
+D -->|Parallel| E1[Try GPT4]
+D -->|Parallel| E2[Try Claude]
+D -->|Parallel| E3[Try Gemini]
+```
+
+
 ### Iterative Processing
+
+Use the `For` handler to iterate over handlers N-times or infinately. Provide a conditional function to break early.
+
 ```go
 llm, _ := openai.NewProvider()
 const iterations = 3
 process := handlers.For("process", iterations, 
-    handlers.Summerize(llm, "Be concise"),
+    handlers.Summarize(llm, "Be concise"),
     llm,
 )
 ```
 
+```mermaid
+---
+title: Looping Over Handlers
+config:
+ look: handDrawn
+---
+graph LR
+G[For] --> C{Condition?}
+C -->|false| End((next))
+C -->|true| H1[Summarize]
+H1 --> H2[LLM]
+H2 --> C
+```
+
 ### Batch Processing
+
+Execute a handler for every value in a slice of values. Each valud is placed in metadata for access.
+
 ```go 
 values := []string{"value1", "value2", "value3"}
 process := handlers.Range("batch", processor, values)
