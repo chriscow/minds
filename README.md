@@ -91,24 +91,72 @@ func main() {
 The library supports Lua and Starlark for mathematical operations. Here's how to integrate a calculator:
 
 ```go
-package main
-
-import (
-    "context"
-    "github.com/chriscow/minds"
-    "github.com/chriscow/minds/calculator"
-)
-
 func main() {
-    calc, _ := calculator.NewCalculator(calculator.Starlark)
-    result, _ := calc.Call(context.Background(), []byte("2 + 3"))
-    println(string(result)) // Outputs: 5
+	const prompt = "calculate 3+7*4"
+	calc, _ := calculator.NewCalculator(calculator.Starlark)
+	req := minds.Request{
+		Messages: minds.Messages{{Role: minds.RoleUser, Content: prompt}},
+	}
+
+	provider, _ := openai.NewProvider(openai.WithTool(calc))
+	resp, _ := provider.GenerateContent(ctx, req)
+	print(resp.Text())
 }
 ```
 
 ## Documentation
 
 Refer to the `_examples` provided for guidance on how to use the modules.
+
+
+## Handler Examples
+
+The library provides composable handlers that can be chained together in various ways:
+
+### Parallel Validation 
+```go
+validate := handlers.Must("validation",
+    handlers.NewFormatValidator(),      // you provide this validator
+    handlers.NewLengthValidator(1000),  // you provide this validator
+    handlers.NewContentScanner(),       // you provide this validator
+)
+```
+
+```mermaid
+graph TD
+    A{Must}
+    B --> C1[Validate Format]
+    B --> C2[Check Length]
+    B --> C3[Scan Content]
+```
+
+
+### Fallback Processing
+```go
+gpt4 := openai.NewProvider()
+claude := anthropic.NewProvider()
+gemini := gemini.NewProvider()
+
+// first successfull response cancels others
+first := handlers.First("generate", gpt4, claude, gemini)
+```
+
+### Iterative Processing
+```go
+llm, _ := openai.NewProvider()
+const iterations = 3
+process := handlers.For("process", iterations, 
+    handlers.Summerize(llm, "Be concise"),
+    llm,
+)
+```
+
+### Batch Processing
+```go 
+values := []string{"value1", "value2", "value3"}
+process := handlers.Range("batch", processor, values)
+```
+
 
 ## Contributing
 
