@@ -87,7 +87,7 @@ func main() {
 	})
 
 	// Create a cycle that alternates between both LLMs, each followed by printing the joke
-	jokeExchange := handlers.Cycle("joke_exchange", 5,
+	jokeExchange := handlers.For("joke_exchange", 5,
 		geminiJoker,
 		printJoke,
 		openAIJoker,
