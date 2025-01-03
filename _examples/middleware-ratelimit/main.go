@@ -10,6 +10,7 @@ import (
 	"github.com/chriscow/minds/handlers"
 	"github.com/chriscow/minds/providers/gemini"
 	"github.com/chriscow/minds/providers/openai"
+	"github.com/fatih/color"
 	"golang.org/x/time/rate"
 )
 
@@ -54,12 +55,16 @@ func (r *RateLimiter) HandleThread(tc minds.ThreadContext, next minds.ThreadHand
 
 func main() {
 	ctx := context.Background()
-	geminiJoker, err := gemini.NewProvider(ctx)
+	cyan := color.New(color.FgCyan).SprintFunc()
+	green := color.New(color.FgGreen).SprintFunc()
+	sysPrompt := `Your name is %s. Prefix your responses with your name in this format: [%s]. If you hear a joke from the user, rate it 1 to 5. Then reply with a joke of your own.`
+
+	geminiJoker, err := gemini.NewProvider(ctx, gemini.WithSystemPrompt(fmt.Sprintf(sysPrompt, cyan("Gemini"), cyan("Gemini"))))
 	if err != nil {
 		log.Fatalf("Error creating Gemini provider: %v", err)
 	}
 
-	openAIJoker, err := openai.NewProvider()
+	openAIJoker, err := openai.NewProvider(openai.WithSystemPrompt(fmt.Sprintf(sysPrompt, green("OpenAI"), green("OpenAI"))))
 	if err != nil {
 		log.Fatalf("Error creating OpenAI provider: %v", err)
 	}
@@ -68,29 +73,26 @@ func main() {
 	limiter := NewRateLimiter("rate_limiter", 1, 5*time.Second)
 
 	printJoke := minds.ThreadHandlerFunc(func(tc minds.ThreadContext, next minds.ThreadHandler) (minds.ThreadContext, error) {
-		fmt.Printf("Joke: %s\n", tc.Messages().Last().Content)
+		fmt.Printf("%s\n", tc.Messages().Last().Content)
 		return tc, nil
 	})
 
+	round := handlers.Sequential("joke_round", geminiJoker, printJoke, openAIJoker, printJoke)
+
 	// Create a cycle that alternates between both LLMs, each followed by printing the joke
-	jokeExchange := handlers.Cycle("joke_exchange", 5,
-		geminiJoker,
-		printJoke,
-		openAIJoker,
-		printJoke,
-	)
-	jokeExchange.Use(limiter)
+	jokeCompetition := handlers.For("joke_exchange", 5, round, nil)
+	jokeCompetition.Use(limiter)
 
 	// Initial prompt
 	initialThread := minds.NewThreadContext(ctx).WithMessages(minds.Messages{
 		{
 			Role:    minds.RoleUser,
-			Content: "Tell me a clean, family-friendly joke. Keep it clean and make me laugh!",
+			Content: "You are in a joke telling contest. You go first.",
 		},
 	})
 
 	// Let them exchange jokes until context is canceled
-	if _, err := jokeExchange.HandleThread(initialThread, nil); err != nil {
+	if _, err := jokeCompetition.HandleThread(initialThread, nil); err != nil {
 		log.Fatalf("Error in joke exchange: %v", err)
 	}
 }

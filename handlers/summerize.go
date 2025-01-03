@@ -16,15 +16,21 @@ type summarize struct {
 	summary   string
 }
 
-// Summerize creates a new summarizer handler with the given LLM provider and
-// system message. The summarizer will prompt the LLM provider to summarize the
-// conversation so far and append the summary to the system message.
+// Summerize creates a handler that maintains a running summary of thread messages.
 //
-// The summary is stored in the handler and will be used for further summaries.
+// The handler prompts an LLM to generate a concise summary of all messages in the thread,
+// focusing on key information. The summary is appended to the system message in
+// XML tags and persists across handler invocations.
 //
-// The summarizer will not modify the thread context. It will duplicate the
-// thread context, setting the first message to the original system message
-// appended with the current summary.
+// Parameters:
+//   - provider: LLM content generator for creating summaries.
+//   - systemMsg: Initial system message to prepend to summaries.
+//
+// Returns:
+//   - A handler that maintains thread summaries via LLM generation.
+//
+// Note: The original thread context is not modified; a new context with the
+// updated system message is created.
 func Summerize(provider minds.ContentGenerator, systemMsg string) *summarize {
 	return &summarize{
 		provider:  provider,
@@ -34,7 +40,7 @@ func Summerize(provider minds.ContentGenerator, systemMsg string) *summarize {
 
 func (s *summarize) HandleThread(tc minds.ThreadContext, next minds.ThreadHandler) (minds.ThreadContext, error) {
 	ctx := tc.Context()
-	messages, err := json.Marshal(tc.Messages)
+	messages, err := json.Marshal(tc.Messages())
 	if err != nil {
 		return tc, err
 	}

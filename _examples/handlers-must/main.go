@@ -7,7 +7,7 @@ import (
 	"github.com/chriscow/minds"
 	"github.com/chriscow/minds/handlers"
 	"github.com/chriscow/minds/providers/gemini"
-	"github.com/chriscow/minds/providers/openai"
+	"github.com/fatih/color"
 )
 
 // The example demonstrates the must handler. The `Must` handler executes all
@@ -17,11 +17,12 @@ import (
 // This is useful for policy enforcement where multiple validators must pass
 // before the next handler is executed.
 func main() {
+	red := color.New(color.FgRed).SprintFunc()
+
 	ctx := context.Background()
-	llm, err := newGemini(ctx)
-	// llm, err := newOpenAI()
+	llm, err := gemini.NewProvider(ctx)
 	if err != nil {
-		panic(err)
+		fmt.Printf("%s: %v", red("error"), err)
 	}
 
 	// This sets up a pipeline that validates messages for dad jokes, coffee
@@ -68,32 +69,24 @@ func main() {
 
 	// Test the validation pipeline for jargon
 	if _, err := validationPipeline.HandleThread(jargon, finalHandler); err != nil {
-		fmt.Printf("Validation failed: %v\n", err)
+		fmt.Printf("%s: %v\n", red("Validation failed"), err)
 	}
 
 	// Test the validation pipeline for dad jokes
 	if _, err := validationPipeline.HandleThread(dad, finalHandler); err != nil {
-		fmt.Printf("Validation failed: %v\n", err)
+		fmt.Printf("%s: %v\n", red("Validation failed"), err)
 	}
 
 	// Test the validation pipeline for coffee jokes
 	if _, err := validationPipeline.HandleThread(coffee, finalHandler); err != nil {
-		fmt.Printf("Validation failed: %v\n", err)
+		fmt.Printf("%s: %v\n", red("Validation failed"), err)
 	}
-}
-
-func newGemini(ctx context.Context) (minds.ContentGenerator, error) {
-	return gemini.NewProvider(ctx)
-}
-
-func newOpenAI() (minds.ContentGenerator, error) {
-	return openai.NewProvider()
 }
 
 func validationPipeline(llm minds.ContentGenerator) minds.ThreadHandler {
 	// Create policy validators with humorous but detectable rules
 	validators := []minds.ThreadHandler{
-		handlers.PolicyValidator(
+		handlers.Policy(
 			llm,
 			"detects_dad_jokes",
 			`Monitor conversation for classic dad joke patterns like:
@@ -104,7 +97,7 @@ func validationPipeline(llm minds.ContentGenerator) minds.ThreadHandler {
 			Explain why they are definitely dad jokes.`,
 			nil,
 		),
-		handlers.PolicyValidator(
+		handlers.Policy(
 			llm,
 			"detects_coffee_obsession",
 			`Analyze messages for signs of extreme coffee dependence:
@@ -115,7 +108,7 @@ func validationPipeline(llm minds.ContentGenerator) minds.ThreadHandler {
 			Provide concerned feedback about caffeine intake.`,
 			nil,
 		),
-		handlers.PolicyValidator(
+		handlers.Policy(
 			llm,
 			"detects_unnecessary_jargon",
 			`Monitor for excessive business speak like:

@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 
 	"github.com/chriscow/minds"
-	"github.com/chriscow/minds/providers/deepseek"
 	"github.com/chriscow/minds/providers/gemini"
 	"github.com/chriscow/minds/providers/openai"
 	"github.com/fatih/color"
@@ -44,7 +44,7 @@ func main() {
 	ctx := context.Background()
 
 	//
-	// Functions need to be wrapped with metadata
+	// Functions need to be wrapped with metadata to turn them into a tool
 	//
 	lightControl, err := minds.WrapFunction(
 		"control_light", // Google recommends using snake_case for function names with Gemini
@@ -56,67 +56,64 @@ func main() {
 		panic(err)
 	}
 
-	withGemini(ctx, lightControl)
-	withOpenAI(ctx, lightControl)
-	withDeepSeek(ctx, lightControl)
+	req := minds.Request{
+		Messages: minds.Messages{{Role: minds.RoleUser, Content: prompt}},
+	}
+
+	withGemini(ctx, lightControl, req)
+	withOpenAI(ctx, lightControl, req)
+	withDeepSeek(ctx, lightControl, req)
 }
 
-func withGemini(ctx context.Context, fn minds.Tool) {
+func withGemini(ctx context.Context, fn minds.Tool, req minds.Request) {
 	provider, err := gemini.NewProvider(ctx, gemini.WithTool(fn))
 	if err != nil {
-		panic(err)
+		fmt.Printf("[%s] error: %v", cyan("Gemini"), err)
+		return
 	}
 	defer provider.Close()
 
-	req := minds.Request{
-		Messages: minds.Messages{
-			{Content: prompt},
-		},
-	}
-
 	resp, err := provider.GenerateContent(ctx, req)
 	if err != nil {
-		panic(err)
+		fmt.Printf("[%s] error: %v", cyan("Gemini"), err)
+		return
 	}
 
 	printOutput(cyan("Gemini"), resp)
 }
 
-func withOpenAI(ctx context.Context, fn minds.Tool) {
+func withOpenAI(ctx context.Context, fn minds.Tool, req minds.Request) {
 	provider, err := openai.NewProvider(openai.WithTool(fn))
 	if err != nil {
-		panic(err)
+		fmt.Printf("[%s] error: %v", purple("DeepSeek"), err)
+		return
 	}
 	defer provider.Close()
 
-	req := minds.Request{
-		Messages: minds.Messages{
-			{Content: prompt},
-		},
-	}
 	resp, err := provider.GenerateContent(ctx, req)
 	if err != nil {
-		panic(err)
+		fmt.Printf("[%s] error: %v", purple("DeepSeek"), err)
+		return
 	}
 
 	printOutput(green("OpenAI"), resp)
 }
 
-func withDeepSeek(ctx context.Context, fn minds.Tool) {
-	provider, err := deepseek.NewProvider(deepseek.WithTool(fn))
+func withDeepSeek(ctx context.Context, fn minds.Tool, req minds.Request) {
+	baseURl := "https://api.deepseek.com"
+	apiKey := os.Getenv("DEEPSEEK_API_KEY")
+	model := "deepseek-chat"
+	provider, err := openai.NewProvider(openai.WithAPIKey(apiKey), openai.WithModel(model), openai.WithTool(fn), openai.WithBaseURL(baseURl))
 	if err != nil {
-		panic(err)
+		fmt.Printf("[%s] error: %v", purple("DeepSeek"), err)
+		return
 	}
 	defer provider.Close()
 
-	req := minds.Request{
-		Messages: minds.Messages{
-			{Content: prompt},
-		},
-	}
 	resp, err := provider.GenerateContent(ctx, req)
 	if err != nil {
-		panic(err)
+		fmt.Printf("[%s] error: %v", purple("DeepSeek"), err)
+		return
 	}
 
 	printOutput(purple("DeepSeek"), resp)

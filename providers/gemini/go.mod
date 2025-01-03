@@ -2,7 +2,7 @@ module github.com/chriscow/minds/providers/gemini
 
 go 1.21
 
-replace github.com/chriscow/minds => ../../
+// replace github.com/chriscow/minds => ../../
 
 require (
 	cloud.google.com/go/ai v0.8.0

@@ -24,7 +24,8 @@ func TestRangeHandler_ContextCanceled(t *testing.T) {
 
 	is.True(err != nil)
 	is.Equal("context canceled", err.Error())
-	is.Equal(1, handler.executed)
+	is.Equal(1, handler.Started())
+	is.Equal(0, handler.Completed())
 }
 
 func TestRangeHandler_Success(t *testing.T) {
@@ -39,8 +40,8 @@ func TestRangeHandler_Success(t *testing.T) {
 	_, err := ranger.HandleThread(tc, final)
 
 	is.NoErr(err)
-	is.Equal(3, handler.executed) // Handler should execute for each value
-	is.Equal(1, final.executed)   // Final handler executes once
+	is.Equal(3, handler.Completed()) // Handler should execute for each value
+	is.Equal(1, final.Completed())   // Final handler executes once
 }
 
 func TestRangeHandler_WithError(t *testing.T) {
@@ -55,9 +56,10 @@ func TestRangeHandler_WithError(t *testing.T) {
 	_, err := ranger.HandleThread(tc, final)
 
 	is.True(err != nil)
-	is.Equal("handler encountered an error", err.Error())
-	is.Equal(1, handler.executed) // Should stop at first error
-	is.Equal(0, final.executed)   // Final handler shouldn't execute after error
+	is.Equal("handler: handler failed", err.Error())
+	is.Equal(1, handler.Started())   // handler should start
+	is.Equal(0, handler.Completed()) // handler should not complete
+	is.Equal(0, final.Completed())   // final handler shouldn't execute after error
 }
 
 func TestRangeHandler_WithMiddleware(t *testing.T) {
@@ -74,9 +76,9 @@ func TestRangeHandler_WithMiddleware(t *testing.T) {
 	_, err := ranger.HandleThread(tc, final)
 
 	is.NoErr(err)
-	is.Equal(3, handler.executed)    // Handler executes for each value
-	is.Equal(3, middleware.executed) // Middleware executes for each value
-	is.Equal(1, final.executed)      // Final handler executes once
+	is.Equal(3, handler.Completed())    // Handler executes for each value
+	is.Equal(3, middleware.Completed()) // Middleware executes for each value
+	is.Equal(1, final.Completed())      // Final handler executes once
 }
 
 func TestRangeHandler_ValueInContext(t *testing.T) {

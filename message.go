@@ -17,12 +17,12 @@ const (
 )
 
 type Message struct {
-	Role       Role           `json:"role"`
-	Content    string         `json:"content"`
-	Name       string         `json:"name,omitempty"`     // For function calls
-	Metadata   map[string]any `json:"metadata,omitempty"` // For additional context
-	ToolCallID string         `json:"tool_call_id,omitempty"`
-	ToolCalls  []ToolCall     `json:"func_response,omitempty"`
+	Role       Role       `json:"role"`
+	Content    string     `json:"content"`
+	Name       string     `json:"name,omitempty"`     // For function calls
+	Metadata   Metadata   `json:"metadata,omitempty"` // For additional context
+	ToolCallID string     `json:"tool_call_id,omitempty"`
+	ToolCalls  []ToolCall `json:"func_response,omitempty"`
 }
 
 func (m Message) TokenCount(tokenizer TokenCounter) (int, error) {

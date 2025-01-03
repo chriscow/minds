@@ -17,7 +17,7 @@ func (p *Provider) HandleThread(tc minds.ThreadContext, next minds.ThreadHandler
 	}
 
 	messages := tc.Messages()
-	messages = append(messages, &minds.Message{
+	messages = append(messages, minds.Message{
 		Role:    minds.RoleAssistant,
 		Content: resp.String(),
 	})

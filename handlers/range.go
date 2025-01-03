@@ -13,6 +13,26 @@ type ranger struct {
 	values     []interface{}
 }
 
+// Range creates a handler that processes a thread with a series of values.
+//
+// For each value in the provided list, the handler executes with the value stored
+// in the thread context's metadata under the key "range_value". An optional middleware
+// handler can be used to wrap each iteration.
+//
+// Parameters:
+//   - name: Identifier for this range handler.
+//   - handler: The handler to execute for each value.
+//   - values: Variadic list of values to iterate over.
+//
+// Returns:
+//   - A handler that processes the thread once for each value.
+//
+// Example:
+//
+//	range := handlers.Range("process",
+//	    processHandler,
+//	    "value1", "value2", "value3",
+//	)
 func Range(name string, handler minds.ThreadHandler, values ...interface{}) *ranger {
 	return &ranger{
 		name:    name,

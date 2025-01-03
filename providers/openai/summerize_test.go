@@ -46,8 +46,8 @@ Ultimately, the meaning of life is what you define it to be, based on your belie
 	})
 
 	result, err := summerizer.HandleThread(tc, nil)
-	msgOut := result.Messages()
 	is.NoErr(err)
+	msgOut := result.Messages()
 
 	is.True(len(msgOut) == 1)
 	is.True(msgOut[0].Role == minds.RoleSystem)

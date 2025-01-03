@@ -8,24 +8,30 @@ var (
 	ErrNoMessages = errors.New("no messages in thread")
 )
 
-type Messages []*Message
+type Messages []Message
 
 // Copy returns a deep copy of the messages
 func (m Messages) Copy() Messages {
 	copied := make(Messages, len(m))
 	for i, msg := range m {
-		if msg != nil {
-			newMsg := *msg
-			copied[i] = &newMsg
+		newMsg := Message{
+			Role:       msg.Role,
+			Content:    msg.Content,
+			Name:       msg.Name,
+			Metadata:   msg.Metadata.Copy(),
+			ToolCallID: msg.ToolCallID,
+			ToolCalls:  msg.ToolCalls,
 		}
+		copied[i] = newMsg
 	}
 	return copied
 }
 
-// Last returns the last message in the slice of messages
-func (m Messages) Last() *Message {
+// Last returns the last message in the slice of messages. NOTE: This will
+// return an empty message if there are no messages in the slice.
+func (m Messages) Last() Message {
 	if len(m) == 0 {
-		return nil
+		return Message{}
 	}
 
 	return m[len(m)-1]

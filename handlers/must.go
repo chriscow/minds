@@ -8,8 +8,26 @@ import (
 	"github.com/chriscow/minds"
 )
 
-// mustHandler executes multiple handlers in parallel. If any handler fails, it cancels
-// the remaining handlers and returns the first encountered error.
+// Must creates a handler that runs multiple handlers in parallel with all-success semantics.
+//
+// All handlers execute concurrently and must complete successfully. If any handler fails,
+// remaining handlers are canceled and the first error encountered is returned. The timing
+// of which error is returned is nondeterministic due to parallel execution.
+//
+// Parameters:
+//   - name: Identifier for this parallel handler group.
+//   - handlers: Variadic list of handlers that must all succeed.
+//
+// Returns:
+//   - A handler that implements parallel execution with all-success semantics.
+//
+// Example:
+//
+//	must := handlers.Must("validation",
+//	    validateA,
+//	    validateB,
+//	    validateC,
+//	)
 type mustHandler struct {
 	name     string
 	handlers []minds.ThreadHandler

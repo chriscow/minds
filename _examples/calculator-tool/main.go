@@ -3,9 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/chriscow/minds"
-	"github.com/chriscow/minds/providers/deepseek"
 	"github.com/chriscow/minds/providers/gemini"
 	"github.com/chriscow/minds/providers/openai"
 	"github.com/chriscow/minds/tools/calculator"
@@ -27,31 +27,29 @@ func main() {
 	calc, _ := calculator.NewCalculator(calculator.Starlark)
 	registry.Register(calc)
 
-	// withGemini(ctx, registry)
-	// withOpenAI(ctx, registry)
-	withDeepSeek(ctx, registry)
+	req := minds.Request{
+		Messages: minds.Messages{{Role: minds.RoleUser, Content: prompt}},
+	}
+
+	withGemini(ctx, registry, req)
+	withOpenAI(ctx, registry, req)
+	withDeepSeek(ctx, registry, req)
 
 	registry = minds.NewToolRegistry()
 	calc, _ = calculator.NewCalculator(calculator.Lua)
 	registry.Register(calc)
 
-	// withGemini(ctx, registry)
-	// withOpenAI(ctx, registry)
-	withDeepSeek(ctx, registry)
+	withGemini(ctx, registry, req)
+	withOpenAI(ctx, registry, req)
+	withDeepSeek(ctx, registry, req)
 }
 
-func withGemini(ctx context.Context, registry minds.ToolRegistry) {
+func withGemini(ctx context.Context, registry minds.ToolRegistry, req minds.Request) {
 	provider, err := gemini.NewProvider(ctx, gemini.WithToolRegistry(registry))
 	if err != nil {
 		panic(err)
 	}
 	defer provider.Close()
-
-	req := minds.Request{
-		Messages: minds.Messages{
-			{Content: prompt},
-		},
-	}
 
 	resp, err := provider.GenerateContent(ctx, req)
 	if err != nil {
@@ -61,18 +59,13 @@ func withGemini(ctx context.Context, registry minds.ToolRegistry) {
 	printOutput(cyan("Gemini"), resp)
 }
 
-func withOpenAI(ctx context.Context, registry minds.ToolRegistry) {
+func withOpenAI(ctx context.Context, registry minds.ToolRegistry, req minds.Request) {
 	provider, err := openai.NewProvider(openai.WithToolRegistry(registry))
 	if err != nil {
 		panic(err)
 	}
 	defer provider.Close()
 
-	req := minds.Request{
-		Messages: minds.Messages{
-			{Content: prompt},
-		},
-	}
 	resp, err := provider.GenerateContent(ctx, req)
 	if err != nil {
 		panic(err)
@@ -81,18 +74,22 @@ func withOpenAI(ctx context.Context, registry minds.ToolRegistry) {
 	printOutput(green("OpenAI"), resp)
 }
 
-func withDeepSeek(ctx context.Context, registry minds.ToolRegistry) {
-	provider, err := deepseek.NewProvider(deepseek.WithToolRegistry(registry))
+func withDeepSeek(ctx context.Context, registry minds.ToolRegistry, req minds.Request) {
+	baseURl := "https://api.deepseek.com"
+	apiKey := os.Getenv("DEEPSEEK_API_KEY")
+	model := "deepseek-chat"
+	provider, err := openai.NewProvider(
+		openai.WithAPIKey(apiKey),
+		openai.WithModel(model),
+		openai.WithToolRegistry(registry),
+		openai.WithBaseURL(baseURl),
+	)
 	if err != nil {
-		panic(err)
+		fmt.Printf("[%s] error: %v", purple("DeepSeek"), err)
+		return
 	}
 	defer provider.Close()
 
-	req := minds.Request{
-		Messages: minds.Messages{
-			{Role: minds.RoleUser, Content: prompt},
-		},
-	}
 	resp, err := provider.GenerateContent(ctx, req)
 	if err != nil {
 		panic(err)

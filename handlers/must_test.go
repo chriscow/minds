@@ -15,37 +15,63 @@ import (
 )
 
 // You can define a sentinel error:
-var errMustHandlerFailed = errors.New("handler failed")
+var errHandlerFailed = errors.New("handler failed")
 
 // Or, if you need more detail, define a struct that implements `error`:
-type MustHandlerError struct {
+type HandlerError struct {
 	Reason string
 }
 
-func (e *MustHandlerError) Error() string {
+func (e *HandlerError) Error() string {
 	return e.Reason
 }
 
-type mockMustHandler struct {
+type mockHandler struct {
 	name      string
 	shouldErr bool
 	sleep     time.Duration
 	started   int32
 	completed int32
+	tcResult  minds.ThreadContext
 }
 
-func (m *mockMustHandler) HandleThread(tc minds.ThreadContext, next minds.ThreadHandler) (minds.ThreadContext, error) {
+func (m *mockHandler) Started() int {
+	return int(atomic.LoadInt32(&m.started))
+}
+
+func (m *mockHandler) Completed() int {
+	return int(atomic.LoadInt32(&m.completed))
+}
+
+func (m *mockHandler) HandleThread(tc minds.ThreadContext, next minds.ThreadHandler) (minds.ThreadContext, error) {
 	atomic.AddInt32(&m.started, 1) // Track execution count
 
+	if m.tcResult == nil {
+		m.tcResult = tc
+	}
+
 	if m.sleep <= 0 {
+		if tc.Context().Err() != nil {
+			return tc, tc.Context().Err()
+		}
+
 		if m.shouldErr {
 			// Return an error immediately if shouldErr is true and sleep is zero or negative
-			return tc, fmt.Errorf("%s: %w", m.name, errMustHandlerFailed)
+			return tc, fmt.Errorf("%s: %w", m.name, errHandlerFailed)
+		}
+
+		if next != nil {
+			tcOut, err := next.HandleThread(tc, nil)
+			if err != nil {
+				return tcOut, err
+			}
+			atomic.AddInt32(&m.completed, 1)
+			return tcOut, nil
 		}
 
 		// Complete immediately if no sleep is required
 		atomic.AddInt32(&m.completed, 1)
-		return tc, nil
+		return m.tcResult, nil
 	}
 
 	// Simulate work that respects context cancellation
@@ -62,12 +88,12 @@ func (m *mockMustHandler) HandleThread(tc minds.ThreadContext, next minds.Thread
 			if sleepTime >= int(m.sleep/time.Millisecond) {
 				if m.shouldErr {
 					// fmt.Printf("%s: encountered an error\n", m.name)
-					return tc, fmt.Errorf("%s: %w", m.name, errMustHandlerFailed)
+					return tc, fmt.Errorf("%s: %w", m.name, errHandlerFailed)
 				}
 
 				// fmt.Printf("%s: completed\n", m.name)
 				atomic.AddInt32(&m.completed, 1)
-				return tc, nil
+				return m.tcResult, nil
 			}
 		case <-tc.Context().Done():
 			// fmt.Printf("%s: context canceled\n", m.name)
@@ -79,9 +105,9 @@ func (m *mockMustHandler) HandleThread(tc minds.ThreadContext, next minds.Thread
 func TestMust_AllHandlersSucceed(t *testing.T) {
 	is := is.New(t)
 	// Setup mock handlers
-	h1 := &mockMustHandler{name: "Handler1"}
-	h2 := &mockMustHandler{name: "Handler2"}
-	h3 := &mockMustHandler{name: "Handler3"}
+	h1 := &mockHandler{name: "Handler1"}
+	h2 := &mockHandler{name: "Handler2"}
+	h3 := &mockHandler{name: "Handler3"}
 
 	// Create Must handler
 	must := handlers.Must("AllSucceed", h1, h2, h3)
@@ -103,9 +129,9 @@ func TestMust_OneHandlerFails(t *testing.T) {
 
 	for i := 0; i < 1000; i++ {
 		t.Run(fmt.Sprintf("OneHandlerFails#%d", i), func(t *testing.T) {
-			h1 := &mockMustHandler{name: "Handler1", sleep: 1000 * time.Millisecond}
-			h2 := &mockMustHandler{name: "Handler2", shouldErr: true}
-			h3 := &mockMustHandler{name: "Handler3", sleep: 1000 * time.Millisecond}
+			h1 := &mockHandler{name: "Handler1", sleep: 1000 * time.Millisecond}
+			h2 := &mockHandler{name: "Handler2", shouldErr: true}
+			h3 := &mockHandler{name: "Handler3", sleep: 1000 * time.Millisecond}
 
 			must := handlers.Must("OneFails", h1, h2, h3)
 			tc := minds.NewThreadContext(context.Background())
@@ -138,9 +164,9 @@ func TestMust_ContextCancellation(t *testing.T) {
 	is := is.New(t)
 
 	// Setup mock handlers
-	h1 := &mockMustHandler{name: "Handler1"}
-	h2 := &mockMustHandler{name: "Handler2"}
-	h3 := &mockMustHandler{name: "Handler3"}
+	h1 := &mockHandler{name: "Handler1"}
+	h2 := &mockHandler{name: "Handler2"}
+	h3 := &mockHandler{name: "Handler3"}
 
 	// Create Must handler
 	must := handlers.Must("ContextCancel", h1, h2, h3)
@@ -181,9 +207,9 @@ func TestMust_NestedMust(t *testing.T) {
 		t.Run(fmt.Sprintf("OneHandlerFails#%d", i), func(t *testing.T) {
 
 			// Setup mock handlers
-			h1 := &mockMustHandler{name: "Handler1"}
-			h2 := &mockMustHandler{name: "Handler2", shouldErr: true}
-			h3 := &mockMustHandler{name: "Handler3"}
+			h1 := &mockHandler{name: "Handler1"}
+			h2 := &mockHandler{name: "Handler2", shouldErr: true}
+			h3 := &mockHandler{name: "Handler3"}
 
 			// Create nested Must handler
 			nestedMust := handlers.Must("Nested", h2, h3)

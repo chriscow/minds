@@ -2,7 +2,7 @@ module github.com/chriscow/minds/providers/openai
 
 go 1.18
 
-replace github.com/chriscow/minds => ../../
+// replace github.com/chriscow/minds => ../../
 
 require (
 	github.com/matryer/is v1.4.1

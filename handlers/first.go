@@ -13,9 +13,28 @@ type anyHandler struct {
 	handlers []minds.ThreadHandler
 }
 
-// Any creates a handler that executes all provided handlers in parallel and returns
-// when the first handler succeeds. If all handlers fail, it returns all errors.
-func Any(name string, handlers ...minds.ThreadHandler) *anyHandler {
+// First creates a handler that runs multiple handlers in parallel and returns on first success.
+//
+// Handlers are executed concurrently and the first successful result is returned.
+// If all handlers fail, an error containing all handler errors is returned.
+// Processing is canceled for remaining handlers once a successful result is obtained.
+// If no handlers are provided, the thread context is passed to the next handler.
+//
+// Parameters:
+//   - name: Identifier for this parallel handler group.
+//   - handlers: Variadic list of handlers to execute in parallel.
+//
+// Returns:
+//   - A handler that implements parallel execution with first-success semantics.
+//
+// Example:
+//
+//	first := handlers.First("validation",
+//	    validateA,
+//	    validateB,
+//	    validateC,
+//	)
+func First(name string, handlers ...minds.ThreadHandler) *anyHandler {
 	return &anyHandler{name: name, handlers: handlers}
 }
 

@@ -83,7 +83,7 @@ func (h *policyValidator) HandleThread(tc minds.ThreadContext, next minds.Thread
 		return tc, fmt.Errorf("failed to generate schema: %w", err)
 	}
 
-	systemMsg := &minds.Message{
+	systemMsg := minds.Message{
 		Role:    minds.RoleSystem,
 		Content: h.systemPrompt,
 	}

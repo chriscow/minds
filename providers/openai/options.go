@@ -11,6 +11,7 @@ type Options struct {
 	schema          *minds.ResponseSchema
 	tools           []minds.Tool
 	registry        minds.ToolRegistry
+	systemPrompt    *string
 }
 
 type Option func(*Options)
@@ -68,5 +69,11 @@ func WithToolRegistry(registry minds.ToolRegistry) Option {
 		}
 
 		o.registry = registry
+	}
+}
+
+func WithSystemPrompt(prompt string) Option {
+	return func(o *Options) {
+		o.systemPrompt = &prompt
 	}
 }

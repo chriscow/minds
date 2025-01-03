@@ -87,7 +87,7 @@ func (r *funcCallResponse) ToolCalls() ([]ToolCall, bool) {
 func (r *funcCallResponse) ToMessages() (Messages, error) {
 	messages := make(Messages, 0, len(r.calls))
 	for _, call := range r.calls {
-		messages = append(messages, &Message{
+		messages = append(messages, Message{
 			Role:       RoleTool,
 			Content:    string(call.Function.Result),
 			ToolCallID: call.ID,

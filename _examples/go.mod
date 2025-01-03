@@ -4,19 +4,18 @@ go 1.22.7
 
 toolchain go1.23.4
 
-replace github.com/chriscow/minds => ../
+// replace github.com/chriscow/minds => ../
 
-replace github.com/chriscow/minds/providers/openai => ../providers/openai
+// replace github.com/chriscow/minds/providers/openai => ../providers/openai
 
-replace github.com/chriscow/minds/providers/gemini => ../providers/gemini
+// replace github.com/chriscow/minds/providers/gemini => ../providers/gemini
 
-replace github.com/chriscow/minds/providers/deepseek => ../providers/deepseek
+// replace github.com/chriscow/minds/providers/deepseek => ../providers/deepseek
 
-replace github.com/chriscow/minds/tools => ../tools
+// replace github.com/chriscow/minds/tools => ../tools
 
 require (
 	github.com/chriscow/minds v0.0.2
-	github.com/chriscow/minds/providers/deepseek v0.0.0-00010101000000-000000000000
 	github.com/chriscow/minds/providers/gemini v0.0.2
 	github.com/chriscow/minds/providers/openai v0.0.2
 	github.com/chriscow/minds/tools v0.0.1

@@ -168,6 +168,15 @@ func (p *Provider) prepareRequest(req minds.Request) (openai.ChatCompletionReque
 		}
 	}
 
+	if p.options.systemPrompt != nil {
+		request.Messages = append([]openai.ChatCompletionMessage{
+			{
+				Role:    string(minds.RoleSystem),
+				Content: *p.options.systemPrompt,
+			},
+		}, request.Messages...)
+	}
+
 	for _, msg := range req.Messages {
 		if msg.Role == "" {
 			msg.Role = minds.RoleUser
