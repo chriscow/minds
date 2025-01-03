@@ -11,10 +11,10 @@ import (
 	"github.com/matryer/is"
 )
 
-// TestSummerize tests the Summerize handler using the OpenAI provider. This
+// TestSummarize tests the Summerize handler using the OpenAI provider. This
 // test lives in the openai module to avoid dragging in dependencies into the
 // minds module.
-func TestSummerize(t *testing.T) {
+func TestSummarize(t *testing.T) {
 	is := is.New(t)
 
 	fmt.Println(os.Getenv("OPENAI_API_KEY"))

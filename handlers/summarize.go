@@ -16,7 +16,7 @@ type summarize struct {
 	summary   string
 }
 
-// Summerize creates a handler that maintains a running summary of thread messages.
+// Summarize creates a handler that maintains a running summary of thread messages.
 //
 // The handler prompts an LLM to generate a concise summary of all messages in the thread,
 // focusing on key information. The summary is appended to the system message in
@@ -31,7 +31,7 @@ type summarize struct {
 //
 // Note: The original thread context is not modified; a new context with the
 // updated system message is created.
-func Summerize(provider minds.ContentGenerator, systemMsg string) *summarize {
+func Summarize(provider minds.ContentGenerator, systemMsg string) *summarize {
 	return &summarize{
 		provider:  provider,
 		systemMsg: systemMsg,
