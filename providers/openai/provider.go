@@ -175,10 +175,11 @@ func (p *Provider) prepareRequest(req minds.Request) (openai.ChatCompletionReque
 
 		calls := make([]openai.ToolCall, len(msg.ToolCalls))
 		for _, call := range msg.ToolCalls {
+
 			calls = append(calls, openai.ToolCall{
 				ID:       call.ID,
 				Type:     "function",
-				Function: openai.FunctionCall{Name: call.Function.Name, Arguments: string(call.Function.Arguments)},
+				Function: openai.FunctionCall{Name: call.Function.Name, Arguments: string(call.Function.Parameters)},
 			})
 		}
 

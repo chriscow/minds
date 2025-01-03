@@ -29,6 +29,21 @@ Use `go get` to install the library:
 go get github.com/chriscow/minds
 ```
 
+The Minds Toolkit is designed to minimize dependencies in your project. You can
+selectively include only the providers you need. For example, if you need the
+OpenAI or Gemini providers, you can install them separately:
+
+```bash
+go get github.com/chriscow/minds/openai
+go get github.com/chriscow/minds/gemini
+```
+
+Similarly, tools are available as separate modules:
+
+```bash
+go get github.com/chriscow/minds/tools
+```
+
 ## Usage
 
 ### Basic Example

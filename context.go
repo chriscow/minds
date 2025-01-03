@@ -13,6 +13,7 @@ type ThreadContext interface {
 	Messages() Messages
 	Metadata() Metadata
 
+	WithContext(ctx context.Context) ThreadContext
 	WithUUID(uuid string) ThreadContext
 	WithMessages(messages Messages) ThreadContext
 	WithMetadata(metadata Metadata) ThreadContext
@@ -49,6 +50,15 @@ func (tc *threadContext) Messages() Messages {
 
 func (tc *threadContext) Metadata() Metadata {
 	return tc.metadata.Copy()
+}
+
+func (tc *threadContext) WithContext(ctx context.Context) ThreadContext {
+	return &threadContext{
+		ctx:      ctx,
+		uuid:     tc.UUID(),
+		metadata: tc.metadata.Copy(),
+		messages: tc.messages.Copy(),
+	}
 }
 
 func (tc *threadContext) WithUUID(uuid string) ThreadContext {

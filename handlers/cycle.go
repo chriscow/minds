@@ -13,6 +13,7 @@ type cycler struct {
 	iterations int // number of times to cycle, 0 means infinite
 }
 
+// Cycle creates a handler that cycles through the provided handlers for a specified number of iterations.
 func Cycle(name string, iterations int, handlers ...minds.ThreadHandler) *cycler {
 	return &cycler{
 		name:       name,

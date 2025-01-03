@@ -129,8 +129,8 @@ func (r *Response) ToolCalls() ([]minds.ToolCall, bool) {
 	return []minds.ToolCall{
 		{
 			Function: minds.FunctionCall{
-				Name:      funcCall.Name,
-				Arguments: b,
+				Name:       funcCall.Name,
+				Parameters: b,
 			},
 		},
 	}, true

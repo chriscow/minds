@@ -121,7 +121,7 @@ func printOutput(resp minds.Response) {
 		calls, _ := resp.ToolCalls()
 		for _, call := range calls {
 			fn := call.Function
-			fmt.Printf("Called %s with args: %v\n", fn.Name, string(fn.Arguments))
+			fmt.Printf("Called %s with args: %v\n", fn.Name, string(fn.Parameters))
 			fmt.Printf("Result: %v\n", string(call.Function.Result))
 		}
 

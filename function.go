@@ -9,10 +9,11 @@ import (
 )
 
 type FunctionCall struct {
-	Name string `json:"name,omitempty"`
+	Name        string `json:"name,omitempty"`
+	Description string `json:"description,omitempty"`
 	// call function with arguments in JSON format
-	Arguments []byte `json:"arguments,omitempty"`
-	Result    []byte `json:"result,omitempty"`
+	Parameters []byte `json:"parameters,omitempty"`
+	Result     []byte `json:"result,omitempty"`
 }
 
 type CallableFunc func(context.Context, []byte) ([]byte, error)
@@ -103,7 +104,7 @@ func HandleFunctionCalls(ctx context.Context, resp Response, registry ToolRegist
 				continue
 			}
 
-			result, err := f.Call(ctx, fn.Arguments)
+			result, err := f.Call(ctx, fn.Parameters)
 			if err != nil {
 				calls[i].Function.Result = []byte(fmt.Sprintf("ERROR: Tool `%s` failed: %v", fn.Name, err))
 				continue

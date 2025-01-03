@@ -103,8 +103,8 @@ func (r Response) ToolCalls() ([]minds.ToolCall, bool) {
 
 		infos = append(infos, minds.ToolCall{
 			Function: minds.FunctionCall{
-				Name:      name,
-				Arguments: []byte(tool.Function.Arguments),
+				Name:       name,
+				Parameters: []byte(tool.Function.Arguments),
 			},
 		})
 	}

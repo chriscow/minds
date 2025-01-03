@@ -4,10 +4,24 @@ go 1.22.7
 
 toolchain go1.23.4
 
-// replace github.com/chriscow/minds => ../
-// replace github.com/chriscow/minds/openai => ../providers/openai
-// replace github.com/chriscow/minds/gemini => ../providers/gemini
-// replace github.com/chriscow/minds/tools => ../tools
+replace github.com/chriscow/minds => ../
+
+replace github.com/chriscow/minds/providers/openai => ../providers/openai
+
+replace github.com/chriscow/minds/providers/gemini => ../providers/gemini
+
+replace github.com/chriscow/minds/providers/deepseek => ../providers/deepseek
+
+replace github.com/chriscow/minds/tools => ../tools
+
+require (
+	github.com/chriscow/minds v0.0.2
+	github.com/chriscow/minds/providers/deepseek v0.0.0-00010101000000-000000000000
+	github.com/chriscow/minds/providers/gemini v0.0.2
+	github.com/chriscow/minds/providers/openai v0.0.2
+	github.com/chriscow/minds/tools v0.0.1
+	golang.org/x/time v0.8.0
+)
 
 require (
 	cloud.google.com/go v0.117.0 // indirect
@@ -16,11 +30,8 @@ require (
 	cloud.google.com/go/auth/oauth2adapt v0.2.6 // indirect
 	cloud.google.com/go/compute/metadata v0.6.0 // indirect
 	cloud.google.com/go/longrunning v0.6.3 // indirect
-	github.com/chriscow/minds v0.0.2 // indirect
-	github.com/chriscow/minds/providers/gemini v0.0.2 // indirect
-	github.com/chriscow/minds/providers/openai v0.0.2 // indirect
-	github.com/chriscow/minds/tools v0.0.1 // indirect
 	github.com/dlclark/regexp2 v1.11.4 // indirect
+	github.com/fatih/color v1.18.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -29,6 +40,10 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.4 // indirect
 	github.com/googleapis/gax-go/v2 v2.14.1 // indirect
+	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
+	github.com/hashicorp/go-retryablehttp v0.7.7 // indirect
+	github.com/mattn/go-colorable v0.1.13 // indirect
+	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/sashabaranov/go-openai v1.36.1 // indirect
 	github.com/tiktoken-go/tokenizer v0.2.1 // indirect
 	github.com/yuin/gopher-lua v1.1.1 // indirect
@@ -45,7 +60,6 @@ require (
 	golang.org/x/sync v0.10.0 // indirect
 	golang.org/x/sys v0.28.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
-	golang.org/x/time v0.8.0 // indirect
 	google.golang.org/api v0.214.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20241230172942-26aa7a208def // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20241230172942-26aa7a208def // indirect

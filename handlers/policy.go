@@ -11,7 +11,7 @@ import (
 // PolicyResultFunc defines a function to handle the result of a policy validation.
 // It takes a context, thread context, and validation result, and returns an error
 // if the validation fails or cannot be processed.
-type PolicyResultFunc func(ctx context.Context, tc minds.ThreadContext, res ValidationResult) error
+type PolicyResultFunc func(ctx context.Context, tc minds.ThreadContext, res PolicyResult) error
 
 // policyValidator performs policy validation on thread content using a content generator (LLM).
 type policyValidator struct {
@@ -21,14 +21,14 @@ type policyValidator struct {
 	resultFn     PolicyResultFunc       // Optional function to process validation results
 }
 
-// ValidationResult represents the outcome of a policy validation.
-type ValidationResult struct {
+// PolicyResult represents the outcome of a policy validation.
+type PolicyResult struct {
 	Valid     bool   `json:"valid" description:"Whether the content passes policy validation"`
 	Reason    string `json:"reason" description:"Explanation for the validation result"`
 	Violation string `json:"violation" description:"Description of the specific violation if any"`
 }
 
-// PolicyValidator creates a new policy validator handler.
+// Policy creates a new policy validator handler.
 //
 // The handler uses an LLM to validate thread content against a given policy. A system prompt
 // is used to guide the validation process, and the result is processed by the optional
@@ -43,7 +43,7 @@ type ValidationResult struct {
 //
 // Returns:
 //   - A thread handler that validates thread content against a policy.
-func PolicyValidator(llm minds.ContentGenerator, name, systemPrompt string, resultFn PolicyResultFunc) *policyValidator {
+func Policy(llm minds.ContentGenerator, name, systemPrompt string, resultFn PolicyResultFunc) *policyValidator {
 	return &policyValidator{
 		llm:          llm,
 		name:         name,
@@ -54,7 +54,7 @@ func PolicyValidator(llm minds.ContentGenerator, name, systemPrompt string, resu
 
 // String returns a string representation of the policy validator.
 func (h *policyValidator) String() string {
-	return fmt.Sprintf("PolicyValidator(%s)", h.name)
+	return fmt.Sprintf("Policy(%s)", h.name)
 }
 
 // HandleThread processes the thread context by validating its content against the policy.
@@ -78,7 +78,7 @@ func (h *policyValidator) HandleThread(tc minds.ThreadContext, next minds.Thread
 		return tc, ctx.Err()
 	}
 
-	schema, err := minds.GenerateSchema(ValidationResult{})
+	schema, err := minds.GenerateSchema(PolicyResult{})
 	if err != nil {
 		return tc, fmt.Errorf("failed to generate schema: %w", err)
 	}
@@ -109,7 +109,7 @@ func (h *policyValidator) HandleThread(tc minds.ThreadContext, next minds.Thread
 		return tc, fmt.Errorf("expected text response, got: %v", resp.Type())
 	}
 
-	var result ValidationResult
+	var result PolicyResult
 	if err := json.Unmarshal([]byte(text), &result); err != nil {
 		return tc, fmt.Errorf("failed to unmarshal validation result from response (%s): %w", text, err)
 	}
