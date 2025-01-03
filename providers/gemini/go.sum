@@ -14,6 +14,10 @@ github.com/chriscow/minds v0.0.0-20241230180205-40ba54528956 h1:msjEM211G3/ICpGL
 github.com/chriscow/minds v0.0.0-20241230180205-40ba54528956/go.mod h1:mFbZsJhKxEpSeuN1zfRt9V8djEa7MTwOxnerpfoJm/k=
 github.com/chriscow/minds v0.0.1 h1:I1IasoVj7uT9ayaVcBtnBRehjNhrYWppteREfkqtzSQ=
 github.com/chriscow/minds v0.0.1/go.mod h1:mFbZsJhKxEpSeuN1zfRt9V8djEa7MTwOxnerpfoJm/k=
+github.com/chriscow/minds v0.0.2 h1:KCsL4syNpi2HVT5o28zmLTmYvWUHhnloC2WlQ/aNGZ4=
+github.com/chriscow/minds v0.0.2/go.mod h1:mFbZsJhKxEpSeuN1zfRt9V8djEa7MTwOxnerpfoJm/k=
+github.com/chriscow/minds v0.0.3 h1:TyIfu2Lav1sGvQnZaO5xbi21anmmcwjJj4xjFLn46FU=
+github.com/chriscow/minds v0.0.3/go.mod h1:mFbZsJhKxEpSeuN1zfRt9V8djEa7MTwOxnerpfoJm/k=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/felixge/httpsnoop v1.0.4 h1:NFTV2Zj1bL4mc9sqWACXbQFVBBg2W3GPvqp8/ESS2Wg=

@@ -6,7 +6,7 @@ go 1.21
 
 require (
 	cloud.google.com/go/ai v0.8.0
-	github.com/chriscow/minds v0.0.1
+	github.com/chriscow/minds v0.0.3
 	github.com/google/generative-ai-go v0.19.0
 	github.com/matryer/is v1.4.1
 	google.golang.org/api v0.213.0
