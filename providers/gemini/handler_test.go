@@ -99,9 +99,10 @@ func TestHandleMessage(t *testing.T) {
 		provider, err := NewProvider(ctx, WithBaseURL(server.URL), WithAPIKey("test"))
 		is.NoErr(err) // Provider initialization should not fail
 
-		thread := minds.NewThreadContext(context.Background()).WithMessages(minds.Messages{
-			{Role: minds.RoleUser, Content: "Hi"},
-		})
+		thread := minds.NewThreadContext(context.Background()).
+			WithMessages(minds.Message{
+				Role: minds.RoleUser, Content: "Hi",
+			})
 
 		handler, ok := provider.(minds.ThreadHandler)
 		is.True(ok) // provider should implement the ThreadHandler interface
@@ -127,9 +128,10 @@ func TestHandleMessage(t *testing.T) {
 		handler, err := NewProvider(ctx, WithBaseURL(server.URL))
 		is.NoErr(err) // Provider initialization should not fail
 
-		thread := minds.NewThreadContext(ctx).WithMessages(minds.Messages{
-			{Role: minds.RoleUser, Content: "Hi"},
-		})
+		thread := minds.NewThreadContext(ctx).
+			WithMessages(minds.Message{
+				Role: minds.RoleUser, Content: "Hi",
+			})
 
 		_, err = handler.HandleThread(thread, nil)
 		is.True(err != nil) // HandleMessage should return an error

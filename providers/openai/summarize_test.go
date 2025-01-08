@@ -28,7 +28,7 @@ func TestSummarize(t *testing.T) {
 
 	systemMsg := "you are a helpful summerization assistant"
 
-	summerizer := handlers.Summerize(llm, systemMsg)
+	summarizer := handlers.Summarize(llm, systemMsg)
 	tc := minds.NewThreadContext(context.Background()).WithMessages(minds.Messages{
 		{Role: minds.RoleSystem, Content: systemMsg},
 		{Role: minds.RoleUser, Content: "What is the meaning of life?"},
@@ -43,9 +43,9 @@ The meaning of life is a deeply personal and philosophical question that has bee
 
 Ultimately, the meaning of life is what you define it to be, based on your beliefs, values, and experiences. What feels meaningful to you?`,
 		},
-	})
+	}...)
 
-	result, err := summerizer.HandleThread(tc, nil)
+	result, err := summarizer.HandleThread(tc, nil)
 	is.NoErr(err)
 	msgOut := result.Messages()
 

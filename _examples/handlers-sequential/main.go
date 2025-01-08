@@ -39,8 +39,8 @@ func runPipeline(ctx context.Context, llm minds.ThreadHandler) {
 	pipeline.Use(validateMiddlware())
 
 	// Initial message thread to start things off
-	initialThread := minds.NewThreadContext(ctx).WithMessages(minds.Messages{
-		{Role: minds.RoleUser, Content: prompt},
+	initialThread := minds.NewThreadContext(ctx).WithMessages(minds.Message{
+		Role: minds.RoleUser, Content: prompt,
 	})
 
 	// Final handler (end of the pipeline)

@@ -104,9 +104,9 @@ func (h *policyValidator) HandleThread(tc minds.ThreadContext, next minds.Thread
 		return tc, fmt.Errorf("policy validation failed to generate: %w", err)
 	}
 
-	text, ok := resp.Text()
-	if !ok {
-		return tc, fmt.Errorf("expected text response, got: %v", resp.Type())
+	text := resp.String()
+	if text == "" {
+		return tc, fmt.Errorf("no response from policy validation")
 	}
 
 	var result PolicyResult

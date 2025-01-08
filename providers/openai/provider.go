@@ -67,12 +67,27 @@ func (p *Provider) GenerateContent(ctx context.Context, req minds.Request) (mind
 		return nil, err
 	}
 
-	resp, err := NewResponse(raw)
+	calls := make([]minds.ToolCall, 0)
+	for _, call := range raw.Choices[0].Message.ToolCalls {
+		if call.Type != "function" {
+			continue
+		}
+
+		calls = append(calls, minds.ToolCall{
+			ID: call.ID,
+			Function: minds.FunctionCall{
+				Name:       call.Function.Name,
+				Parameters: []byte(call.Function.Arguments),
+			},
+		})
+	}
+
+	calls, err = minds.HandleFunctionCalls(ctx, calls, p.options.registry)
 	if err != nil {
 		return nil, err
 	}
 
-	return minds.HandleFunctionCalls(ctx, resp, p.options.registry)
+	return NewResponse(raw, calls)
 }
 
 func setupOptions(opts ...Option) (Options, error) {
@@ -177,9 +192,18 @@ func (p *Provider) prepareRequest(req minds.Request) (openai.ChatCompletionReque
 		}, request.Messages...)
 	}
 
-	for _, msg := range req.Messages {
+	for i, msg := range req.Messages {
 		if msg.Role == "" {
-			msg.Role = minds.RoleUser
+			req.Messages[i].Role = minds.RoleUser
+		}
+
+		if msg.Role == minds.RoleModel {
+			req.Messages[i].Role = minds.RoleAssistant
+		}
+
+		switch msg.Role {
+		case minds.RoleModel:
+			request.Messages[i].Role = string(minds.RoleAssistant)
 		}
 
 		calls := make([]openai.ToolCall, len(msg.ToolCalls))
@@ -202,7 +226,11 @@ func (p *Provider) prepareRequest(req minds.Request) (openai.ChatCompletionReque
 
 	if len(tools) > 0 {
 		request.Tools = tools
-		request.ToolChoice = "auto"
+		if req.Options.ToolChoice != "" {
+			request.ToolChoice = req.Options.ToolChoice
+		} else {
+			request.ToolChoice = "auto"
+		}
 	}
 
 	return request, nil

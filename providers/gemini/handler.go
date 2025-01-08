@@ -1,6 +1,8 @@
 package gemini
 
 import (
+	"fmt"
+
 	"github.com/chriscow/minds"
 )
 
@@ -15,14 +17,16 @@ func (p *Provider) HandleThread(tc minds.ThreadContext, next minds.ThreadHandler
 		return tc, err
 	}
 
-	messages := append(tc.Messages(), minds.Message{
-		Role:    minds.RoleAssistant,
-		Content: resp.String(),
-	})
+	messages, err := resp.(*Response).Messages()
+	tc.AppendMessages(messages...)
 
 	if next != nil {
-		return next.HandleThread(tc.WithMessages(messages), nil)
+		if err != nil {
+			return tc, fmt.Errorf("failed to get messages from response: %w", err)
+		}
+
+		return next.HandleThread(tc, nil)
 	}
 
-	return tc.WithMessages(messages), nil
+	return tc, nil
 }

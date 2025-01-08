@@ -73,11 +73,9 @@ Latest Responses:
 	}
 	s.summary = resp.String()
 
-	tc = tc.WithMessages(minds.Messages{
-		{
-			Role:    minds.RoleSystem,
-			Content: fmt.Sprintf("%s\n\n<summary>%s</summary>", s.systemMsg, s.summary),
-		},
+	tc = tc.WithMessages(minds.Message{
+		Role:    minds.RoleSystem,
+		Content: fmt.Sprintf("%s\n\n<summary>%s</summary>", s.systemMsg, s.summary),
 	})
 
 	if next != nil {

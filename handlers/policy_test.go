@@ -18,34 +18,25 @@ type mockResponse struct {
 }
 
 func (m *mockResponse) String() string {
-	return m.Reason
-}
-
-func (m *mockResponse) Type() minds.ResponseType {
-	return minds.ResponseTypeText
-}
-
-func (m *mockResponse) Text() (string, bool) {
 	b, err := json.Marshal(m)
 	if err != nil {
-		return "", false
+		return "failed to marshal mock response"
 	}
-
-	return string(b), true
+	return string(b)
 }
 
-func (m *mockResponse) ToolCalls() ([]minds.ToolCall, bool) {
-	return nil, false
+func (m *mockResponse) ToolCalls() []minds.ToolCall {
+	return []minds.ToolCall{}
 }
 
-func (m *mockResponse) ToMessages() (minds.Messages, error) {
-	return minds.Messages{
-		{
-			Role:    minds.RoleAssistant,
-			Content: m.Reason,
-		},
-	}, nil
-}
+// func (m *mockResponse) Messages() (minds.Messages, error) {
+// 	return minds.Messages{
+// 		{
+// 			Role:    minds.RoleAssistant,
+// 			Content: m.Reason,
+// 		},
+// 	}, nil
+// }
 
 type mockContentGenerator struct {
 	mockResponse mockResponse
@@ -86,9 +77,9 @@ func TestPolicy_ContextCanceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	tc := minds.NewThreadContext(ctx).WithMessages(minds.Messages{
-		{Role: minds.RoleUser, Content: "Test message."},
-	})
+	tc := minds.NewThreadContext(ctx).
+		WithMessages(minds.Message{Role: minds.RoleUser, Content: "Test message."})
+
 	_, err := validator.HandleThread(tc, nil)
 	is.True(err != nil) // Ensure an error occurred
 	is.Equal(err.Error(), "context canceled")
@@ -120,9 +111,7 @@ func TestPolicy_HandleThread_Success(t *testing.T) {
 	validator := handlers.Policy(mockLLM, "TestPolicy", "Validate the following content.", rf.handleResult)
 
 	ctx := context.Background()
-	msgIn := minds.Messages{
-		{Role: minds.RoleUser, Content: "Test message."},
-	}
+	msgIn := minds.Message{Role: minds.RoleUser, Content: "Test message."}
 
 	tc := minds.NewThreadContext(ctx).WithMessages(msgIn)
 
@@ -130,9 +119,9 @@ func TestPolicy_HandleThread_Success(t *testing.T) {
 	msgOut := tcOut.Messages()
 
 	is.NoErr(err)                                   // Ensure no error occurred
-	is.Equal(len(msgOut), len(msgIn))               // Ensure the message count matches
-	is.Equal(msgOut[0].Role, msgIn[0].Role)         // Ensure the role matches
-	is.Equal(msgOut[0].Content, msgIn[0].Content)   // Ensure the content matches
+	is.Equal(len(msgOut), 1)                        // Ensure the message count matches
+	is.Equal(msgOut[0].Role, msgIn.Role)            // Ensure the role matches
+	is.Equal(msgOut[0].Content, msgIn.Content)      // Ensure the content matches
 	is.Equal(rf.result.Valid, true)                 // Ensure the result is valid
 	is.Equal(rf.result.Reason, "Content is valid.") // Ensure the reason matches
 	is.Equal(rf.result.Violation, "")               // Ensure the violation is empty
@@ -152,9 +141,7 @@ func TestPolicy_HandleThread_InvalidResponse(t *testing.T) {
 	t.Run("NoResultFn", func(t *testing.T) {
 		validator := handlers.Policy(mockLLM, "TestPolicy", "Validate the following content.", nil)
 
-		msgIn := minds.Messages{
-			{Role: minds.RoleUser, Content: "Test message."},
-		}
+		msgIn := minds.Message{Role: minds.RoleUser, Content: "Test message."}
 
 		tc := minds.NewThreadContext(context.Background()).WithMessages(msgIn)
 
@@ -171,9 +158,7 @@ func TestPolicy_HandleThread_InvalidResponse(t *testing.T) {
 
 		validator := handlers.Policy(mockLLM, "TestPolicy", "Validate the following content.", fn.handleResult)
 
-		msgIn := minds.Messages{
-			{Role: minds.RoleUser, Content: "Test message."},
-		}
+		msgIn := minds.Message{Role: minds.RoleUser, Content: "Test message."}
 
 		tc := minds.NewThreadContext(context.Background()).WithMessages(msgIn)
 
@@ -192,9 +177,7 @@ func TestPolicy_HandleThread_GenerationError(t *testing.T) {
 
 	validator := handlers.Policy(mockLLM, "TestPolicy", "Validate the following content.", nil)
 
-	msgIn := minds.Messages{
-		{Role: minds.RoleUser, Content: "Test message."},
-	}
+	msgIn := minds.Message{Role: minds.RoleUser, Content: "Test message."}
 
 	tc := minds.NewThreadContext(context.Background()).WithMessages(msgIn)
 
@@ -216,9 +199,7 @@ func TestPolicy_HandleThread_Failure_NoResultFn(t *testing.T) {
 
 	validator := handlers.Policy(mockLLM, "TestPolicy", "Validate the following content.", nil)
 
-	msgIn := minds.Messages{
-		{Role: minds.RoleUser, Content: "Test message."},
-	}
+	msgIn := minds.Message{Role: minds.RoleUser, Content: "Test message."}
 
 	tc := minds.NewThreadContext(context.Background()).WithMessages(msgIn)
 

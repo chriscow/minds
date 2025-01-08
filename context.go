@@ -13,9 +13,10 @@ type ThreadContext interface {
 	Messages() Messages
 	Metadata() Metadata
 
+	AppendMessages(message ...Message) ThreadContext
 	WithContext(ctx context.Context) ThreadContext
 	WithUUID(uuid string) ThreadContext
-	WithMessages(messages Messages) ThreadContext
+	WithMessages(message ...Message) ThreadContext
 	WithMetadata(metadata Metadata) ThreadContext
 }
 
@@ -34,6 +35,13 @@ func NewThreadContext(ctx context.Context) ThreadContext {
 		metadata: Metadata{},
 		messages: Messages{},
 	}
+}
+
+func (tc *threadContext) AppendMessages(messages ...Message) ThreadContext {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	tc.messages = append(tc.messages, messages...)
+	return tc
 }
 
 func (tc *threadContext) Context() context.Context {
@@ -70,7 +78,7 @@ func (tc *threadContext) WithUUID(uuid string) ThreadContext {
 	}
 }
 
-func (tc *threadContext) WithMessages(messages Messages) ThreadContext {
+func (tc *threadContext) WithMessages(messages ...Message) ThreadContext {
 	return &threadContext{
 		ctx:      tc.Context(),
 		uuid:     tc.UUID(),

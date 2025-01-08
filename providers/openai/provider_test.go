@@ -12,7 +12,7 @@ import (
 	"github.com/sashabaranov/go-openai"
 )
 
-func newMockResponse() openai.ChatCompletionResponse {
+func newMockTextResponse() openai.ChatCompletionResponse {
 	return openai.ChatCompletionResponse{
 		Choices: []openai.ChatCompletionChoice{{
 			Message: openai.ChatCompletionMessage{
@@ -50,9 +50,11 @@ func newMockTool() (minds.Tool, error) {
 }
 
 func newMockToolCallResponse() openai.ChatCompletionResponse {
-	mockResponse := newMockResponse() // Ensure this function returns a valid mock response
+	mockResponse := newMockTextResponse() // Ensure this function returns a valid mock response
 	mockResponse.Choices[0].Message.ToolCalls = []openai.ToolCall{
 		{
+			ID:   "12345",
+			Type: "function",
 			Function: openai.FunctionCall{
 				Name:      "mock_function",
 				Arguments: `{"value": 3}`,
@@ -70,7 +72,7 @@ func TestProvider_GenerateContent(t *testing.T) {
 	// Create a test server that returns mock responses
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(newMockResponse())
+		json.NewEncoder(w).Encode(newMockTextResponse())
 	}))
 	defer server.Close()
 
@@ -85,14 +87,9 @@ func TestProvider_GenerateContent(t *testing.T) {
 	}
 
 	resp, err := provider.GenerateContent(ctx, req)
-	is.NoErr(err)                                 // GenerateContent should not return an error
-	is.True(resp != nil)                          // Response should not be nil
-	is.Equal(resp.Type(), minds.ResponseTypeText) // Ensure it is a text response
-	is.Equal(resp.String(), "Hello, world!")      // Ensure the mock response matches
-
-	text, ok := resp.Text()
-	is.True(ok)                     // Should be able to extract text
-	is.Equal(text, "Hello, world!") // Ensure the mock response matches
+	is.NoErr(err)                            // GenerateContent should not return an error
+	is.True(resp != nil)                     // Response should not be nil
+	is.Equal(resp.String(), "Hello, world!") // Ensure the mock response matches
 }
 
 func TestProvider_HandleThread(t *testing.T) {
@@ -101,7 +98,7 @@ func TestProvider_HandleThread(t *testing.T) {
 	// Create a test server that returns mock responses
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(newMockResponse())
+		json.NewEncoder(w).Encode(newMockTextResponse())
 	}))
 	defer server.Close()
 
@@ -110,8 +107,8 @@ func TestProvider_HandleThread(t *testing.T) {
 
 	ctx := context.Background()
 
-	thread := minds.NewThreadContext(ctx).WithMessages(minds.Messages{
-		{Role: minds.RoleUser, Content: "Hi there!"},
+	thread := minds.NewThreadContext(ctx).WithMessages(minds.Message{
+		Role: minds.RoleUser, Content: "Hi there!",
 	})
 
 	result, err := handler.HandleThread(thread, nil)
@@ -163,14 +160,12 @@ func TestProvider_GenerateContent_WithToolRegistry(t *testing.T) {
 	//
 	ctx := context.Background()
 	resp, err := provider.GenerateContent(ctx, req)
-	is.NoErr(err)                                     // GenerateContent should not return an error
-	is.True(resp != nil)                              // Response should not be nil
-	is.Equal(resp.Type(), minds.ResponseTypeToolCall) // Ensure it is a tool call response
+	is.NoErr(err)        // GenerateContent should not return an error
+	is.True(resp != nil) // Response should not be nil
 	str := resp.String()
-	is.Equal(str, "mock_function") // Ensure the mock function was called
+	is.Equal(str, "Hello, world!") // Ensure the mock response matches
 
-	toolCalls, ok := resp.ToolCalls()
-	is.True(ok)                                           // Should be able to extract tool calls
+	toolCalls := resp.ToolCalls()
 	is.Equal(len(toolCalls), 1)                           // Ensure there is exactly one tool call
 	is.Equal(toolCalls[0].Function.Name, "mock_function") // Ensure the function name matches
 

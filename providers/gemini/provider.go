@@ -3,10 +3,12 @@ package gemini
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 
 	"github.com/chriscow/minds"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 
 	"github.com/google/generative-ai-go/genai"
@@ -62,6 +64,13 @@ func NewProvider(ctx context.Context, opts ...Option) (*Provider, error) {
 		options: options,
 	}
 
+	// Register any functions provided in options
+	for _, f := range p.options.tools {
+		if err := p.options.registry.Register(f); err != nil {
+			return nil, err
+		}
+	}
+
 	return &p, nil
 }
 
@@ -83,6 +92,27 @@ func (p *Provider) GenerateContent(ctx context.Context, req minds.Request) (mind
 		return nil, fmt.Errorf("failed to create model: %w", err)
 	}
 
+	// Convert functions to Gemini format
+	tools := make([]*genai.FunctionDeclaration, 0)
+	for _, f := range p.options.registry.List() {
+		schema, err := convertSchema(f.Parameters())
+		if err != nil {
+			return nil, err
+		}
+
+		tools = append(tools, &genai.FunctionDeclaration{
+			Name:        f.Name(),
+			Description: f.Description(),
+			Parameters:  schema,
+		})
+	}
+
+	if len(tools) > 0 {
+		model.Tools = []*genai.Tool{{
+			FunctionDeclarations: tools,
+		}}
+	}
+
 	// TODO: Gemini is not generating the model on the fly
 	// The model is created when the client is created
 	cs := model.StartChat()
@@ -100,17 +130,18 @@ func (p *Provider) GenerateContent(ctx context.Context, req minds.Request) (mind
 		model.ResponseSchema = schema
 	}
 
-	for _, msg := range req.Messages {
+	for i, msg := range req.Messages {
 		if msg.Role == minds.RoleSystem {
 			if sysPrompt == nil {
 				sysPrompt = &genai.Content{Parts: []genai.Part{}, Role: "system"}
 			}
 			part := genai.Text(msg.Content)
 			sysPrompt.Parts = append(sysPrompt.Parts, part)
+
 		} else if msg.Role == minds.RoleFunction {
 			response := make(map[string]any)
-			if err := json.Unmarshal([]byte("test"), &response); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal function response: %w", err)
+			if err := json.Unmarshal([]byte(msg.Content), &response); err != nil {
+				response["result"] = msg.Content
 			}
 			history = append(history, &genai.Content{
 				Parts: []genai.Part{
@@ -120,7 +151,16 @@ func (p *Provider) GenerateContent(ctx context.Context, req minds.Request) (mind
 					},
 				},
 			})
+		} else if msg.Role == minds.RoleAssistant {
+			history = append(history, &genai.Content{
+				Role:  string(minds.RoleModel),
+				Parts: []genai.Part{genai.Text(msg.Content)},
+			})
 		} else {
+			if msg.Content == "" {
+				return nil, fmt.Errorf("message content at index %d is empty", i)
+			}
+
 			if msg.Role == "" {
 				msg.Role = minds.RoleUser
 			}
@@ -150,15 +190,40 @@ func (p *Provider) GenerateContent(ctx context.Context, req minds.Request) (mind
 
 	raw, err := cs.SendMessage(ctx, prompt...)
 	if err != nil {
+		err2 := errors.Unwrap(err)
+		if googErr, ok := err2.(*googleapi.Error); ok {
+			return nil, fmt.Errorf("%s", googErr.Body)
+		}
+
 		return nil, err
 	}
 
-	resp, err := NewResponse(raw)
+	calls := make([]minds.ToolCall, 0)
+	for _, part := range raw.Candidates[0].Content.Parts {
+		call, ok := part.(genai.FunctionCall)
+		if !ok {
+			continue
+		}
+
+		b, err := json.Marshal(call.Args)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal function call arguments: %w", err)
+		}
+
+		calls = append(calls, minds.ToolCall{
+			Function: minds.FunctionCall{
+				Name:       call.Name,
+				Parameters: b,
+			},
+		})
+	}
+
+	calls, err = minds.HandleFunctionCalls(ctx, calls, p.options.registry)
 	if err != nil {
 		return nil, err
 	}
 
-	return minds.HandleFunctionCalls(ctx, resp, p.options.registry)
+	return NewResponse(raw, calls)
 }
 
 func (p *Provider) getModel() (*genai.GenerativeModel, error) {
@@ -173,34 +238,6 @@ func (p *Provider) getModel() (*genai.GenerativeModel, error) {
 
 	if p.options.systemPrompt != nil {
 		model.SystemInstruction = &genai.Content{Parts: []genai.Part{genai.Text(*p.options.systemPrompt)}, Role: "system"}
-	}
-
-	// Register any functions provided in options
-	for _, f := range p.options.tools {
-		if err := p.options.registry.Register(f); err != nil {
-			return nil, err
-		}
-	}
-
-	// Convert functions to Gemini format
-	tools := make([]*genai.FunctionDeclaration, 0)
-	for _, f := range p.options.registry.List() {
-		schema, err := convertSchema(f.Parameters())
-		if err != nil {
-			return nil, err
-		}
-
-		tools = append(tools, &genai.FunctionDeclaration{
-			Name:        f.Name(),
-			Description: f.Description(),
-			Parameters:  schema,
-		})
-	}
-
-	if len(tools) > 0 {
-		model.Tools = []*genai.Tool{{
-			FunctionDeclarations: tools,
-		}}
 	}
 
 	return model, nil

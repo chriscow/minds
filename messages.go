@@ -42,12 +42,12 @@ func (m Messages) Exclude(roles ...Role) Messages {
 	filteredMsgs := Messages{}
 
 	for _, msg := range m {
-		keep := false
+		keep := true
 		for _, role := range roles {
 			if msg.Role == role {
-				continue
+				keep = false
+				break
 			}
-			keep = true
 		}
 
 		if keep {

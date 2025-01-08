@@ -6,6 +6,7 @@ type RequestOptions struct {
 	MaxOutputTokens *int
 	ResponseSchema  *ResponseSchema
 	ToolRegistry    ToolRegistry
+	ToolChoice      string
 }
 
 type RequestOption func(*RequestOptions)

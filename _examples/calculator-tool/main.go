@@ -102,20 +102,14 @@ func printOutput(name string, resp minds.Response) {
 	//
 	// We should get a function call response
 	//
-	switch resp.Type() {
-	case minds.ResponseTypeText:
-		text, _ := resp.Text()
+	text := resp.String()
+	if text != "" {
 		fmt.Printf("[%s] Unexpected response: %s\n", name, text)
+	}
 
-	case minds.ResponseTypeToolCall:
-		calls, _ := resp.ToolCalls()
-		for _, call := range calls {
-			fn := call.Function
-			fmt.Printf("[%s] Called %s with args: %v\n", name, fn.Name, string(fn.Parameters))
-			fmt.Printf("[%s] Result: %v\n", name, string(fn.Result))
-		}
-
-	default:
-		fmt.Printf("[%s] Unknown response type: %v\n", name, resp.Type())
+	for _, call := range resp.ToolCalls() {
+		fn := call.Function
+		fmt.Printf("[%s] Called %s with args: %v\n", name, fn.Name, string(fn.Parameters))
+		fmt.Printf("[%s] Result: %v\n", name, string(fn.Result))
 	}
 }

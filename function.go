@@ -83,37 +83,34 @@ func (f *functionWrapper) Call(ctx context.Context, params []byte) ([]byte, erro
 	return f.impl(ctx, params)
 }
 
-func HandleFunctionCalls(ctx context.Context, resp Response, registry ToolRegistry) (Response, error) {
-
-	if calls, ok := resp.ToolCalls(); ok {
-		for i, call := range calls {
-			if ctx.Err() != nil {
-				return nil, ctx.Err()
-			}
-			fn := call.Function
-			f, ok := registry.Lookup(fn.Name)
-			if !ok {
-				// The tool was not found. Return a string telling the LLM what tools are available
-				tools := registry.List()
-				names := make([]string, 0, len(tools))
-				for _, tool := range tools {
-					names = append(names, tool.Name())
-				}
-
-				calls[i].Function.Result = []byte(fmt.Sprintf("ERROR: `%s` is not a valid tool name. The available tools are: %s", fn.Name, names))
-				continue
-			}
-
-			result, err := f.Call(ctx, fn.Parameters)
-			if err != nil {
-				calls[i].Function.Result = []byte(fmt.Sprintf("ERROR: Tool `%s` failed: %v", fn.Name, err))
-				continue
-			}
-
-			calls[i].Function.Result = result
+// HandleFunctionCalls takes an array of ToolCalls and executes the functions they represent
+// using the provided ToolRegistry. It returns an array of ToolCalls with the results of the function calls.
+func HandleFunctionCalls(ctx context.Context, calls []ToolCall, registry ToolRegistry) ([]ToolCall, error) {
+	for i, call := range calls {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
 		}
-		return NewToolCallResponse(calls)
-	}
+		fn := call.Function
+		f, ok := registry.Lookup(fn.Name)
+		if !ok {
+			// The tool was not found. Return a string telling the LLM what tools are available
+			tools := registry.List()
+			names := make([]string, 0, len(tools))
+			for _, tool := range tools {
+				names = append(names, tool.Name())
+			}
 
-	return resp, nil
+			calls[i].Function.Result = []byte(fmt.Sprintf("ERROR: `%s` is not a valid tool name. The available tools are: %s", fn.Name, names))
+			continue
+		}
+
+		result, err := f.Call(ctx, fn.Parameters)
+		if err != nil {
+			calls[i].Function.Result = []byte(fmt.Sprintf("ERROR: Tool `%s` failed: %v", fn.Name, err))
+			continue
+		}
+
+		calls[i].Function.Result = result
+	}
+	return calls, nil
 }

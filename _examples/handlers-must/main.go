@@ -18,6 +18,7 @@ import (
 // before the next handler is executed.
 func main() {
 	red := color.New(color.FgRed).SprintFunc()
+	green := color.New(color.FgGreen).SprintFunc()
 
 	ctx := context.Background()
 	llm, err := gemini.NewProvider(ctx)
@@ -69,17 +70,17 @@ func main() {
 
 	// Test the validation pipeline for jargon
 	if _, err := validationPipeline.HandleThread(jargon, finalHandler); err != nil {
-		fmt.Printf("%s: %v\n", red("Validation failed"), err)
+		fmt.Printf("[%s] %s: %v\n", green("PASS"), red("Validation failed"), err)
 	}
 
 	// Test the validation pipeline for dad jokes
 	if _, err := validationPipeline.HandleThread(dad, finalHandler); err != nil {
-		fmt.Printf("%s: %v\n", red("Validation failed"), err)
+		fmt.Printf("[%s] %s: %v\n", green("PASS"), red("Validation failed"), err)
 	}
 
 	// Test the validation pipeline for coffee jokes
 	if _, err := validationPipeline.HandleThread(coffee, finalHandler); err != nil {
-		fmt.Printf("%s: %v\n", red("Validation failed"), err)
+		fmt.Printf("[%s] %s: %v\n", green("PASS"), red("Validation failed"), err)
 	}
 }
 

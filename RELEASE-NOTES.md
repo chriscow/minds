@@ -1,9 +1,43 @@
+# v0.0.4
+
+## Summary
+
+- Added new handler: switch
+- Renamed ThreadContext `AppendMessage` to `AppendMessages(...Message)`
+
+
+## New Handlers
+
+### **Switch**
+
+Switch creates a new Switch handler that executes the first matching case's
+handler. If no cases match, it executes the default handler. The name
+parameter is used for debugging and logging purposes.
+
+The SwitchCase struct pairs a `SwitchCondition` interface with a handler.
+When the condition evaluates to true, the corresponding handler is executed.
+
+Example:
+
+The MetadataEquals condition checks if the metadata key "type" equals "question"
+```go
+metadata := MetadataEquals{Key: "type", Value: "question"}
+questionHandler := SomeQuestionHandler()
+defaultHandler := DefaultHandler()
+
+sw := Switch("type-switch",
+	defaultHandler,
+	SwitchCase{metadata, questionHandler},
+)
+```
+
+
 # v0.0.3
 
 ## Summary
 
-- Added the new handlers: Cycle, First, Must, Policy, Range.
-
+- Added the new handlers: For, First, Must, Policy, Range.
+- Greatly simplified Response interface (for now). More changes coming.
 
 ## New Handlers
 

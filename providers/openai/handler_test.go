@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,7 +21,7 @@ func TestHandleMessage(t *testing.T) {
 		// Create a test server that returns mock responses
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(newMockResponse())
+			json.NewEncoder(w).Encode(newMockTextResponse())
 		}))
 		defer server.Close()
 
@@ -31,9 +32,10 @@ func TestHandleMessage(t *testing.T) {
 		handler, ok := provider.(minds.ThreadHandler)
 		is.True(ok) // provider should implement the ThreadHandler interface
 
-		thread := minds.NewThreadContext(context.Background()).WithMessages(minds.Messages{
-			{Role: minds.RoleUser, Content: "Hi"},
-		})
+		thread := minds.NewThreadContext(context.Background()).
+			WithMessages(minds.Message{
+				Role: minds.RoleUser, Content: "Hi",
+			})
 
 		result, err := handler.HandleThread(thread, nil)
 		is.NoErr(err) // HandleMessage should not return an error
@@ -46,10 +48,11 @@ func TestHandleMessage(t *testing.T) {
 	t.Run("returns error on failure", func(t *testing.T) {
 		is := is.New(t)
 		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-1*time.Second))
+		cancel()
 
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(newMockResponse())
+			json.NewEncoder(w).Encode(newMockTextResponse())
 		}))
 		defer server.Close()
 
@@ -60,13 +63,13 @@ func TestHandleMessage(t *testing.T) {
 		handler, ok := provider.(minds.ThreadHandler)
 		is.True(ok) // provider should implement the ThreadHandler interface
 
-		thread := minds.NewThreadContext(ctx).WithMessages(minds.Messages{
-			{Role: minds.RoleUser, Content: "Hi"},
-		})
+		thread := minds.NewThreadContext(ctx).
+			WithMessages(minds.Message{
+				Role: minds.RoleUser, Content: "Hi",
+			})
 
 		_, err = handler.HandleThread(thread, nil)
 		is.True(err != nil) // HandleMessage should return an error
-		is.Equal(err.Error(), context.DeadlineExceeded.Error())
-		cancel()
+		is.True(strings.Contains(err.Error(), context.DeadlineExceeded.Error()))
 	})
 }

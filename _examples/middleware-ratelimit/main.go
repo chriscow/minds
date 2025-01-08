@@ -57,7 +57,7 @@ func main() {
 	ctx := context.Background()
 	cyan := color.New(color.FgCyan).SprintFunc()
 	green := color.New(color.FgGreen).SprintFunc()
-	sysPrompt := `Your name is %s. Prefix your responses with your name in this format: [%s]. If you hear a joke from the user, rate it 1 to 5. Then reply with a joke of your own.`
+	sysPrompt := `Your name is %s. You enjoy telling jokes and enjoy joke competitions. Prefix your responses with your name in this format: [%s]. If you hear a joke from the user, rate it 1 to 5. Then reply with a joke of your own.`
 
 	geminiJoker, err := gemini.NewProvider(ctx, gemini.WithSystemPrompt(fmt.Sprintf(sysPrompt, cyan("Gemini"), cyan("Gemini"))))
 	if err != nil {
