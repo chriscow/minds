@@ -1,3 +1,5 @@
+github.com/chriscow/minds v0.0.4 h1:VVj4ty53bJLHE/2JTyLQuNEc32hm9yaNZCU29EsIsOU=
+github.com/chriscow/minds v0.0.4/go.mod h1:iznO9umfPFv30TzYbhmhSk5h1LiVPsNw//LX46AUH2k=
 github.com/dlclark/regexp2 v1.9.0 h1:pTK/l/3qYIKaRXuHnEnIf7Y5NxfRPfpb7dis6/gdlVI=
 github.com/dlclark/regexp2 v1.9.0/go.mod h1:DHkYz0B9wPfa6wondMfaivmHpzrQ3v9q8cnmRbL6yW8=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=

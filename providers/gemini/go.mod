@@ -2,11 +2,10 @@ module github.com/chriscow/minds/providers/gemini
 
 go 1.21
 
-replace github.com/chriscow/minds => ../../
+// replace github.com/chriscow/minds => ../../
 
 require (
 	cloud.google.com/go/ai v0.8.0
-	github.com/chriscow/minds v0.0.0-00010101000000-000000000000
 	github.com/google/generative-ai-go v0.19.0
 	github.com/matryer/is v1.4.1
 	google.golang.org/api v0.213.0
@@ -18,6 +17,7 @@ require (
 	cloud.google.com/go/auth/oauth2adapt v0.2.6 // indirect
 	cloud.google.com/go/compute/metadata v0.6.0 // indirect
 	cloud.google.com/go/longrunning v0.5.7 // indirect
+	github.com/chriscow/minds v0.0.4 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
