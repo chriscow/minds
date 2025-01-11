@@ -4,17 +4,21 @@ go 1.22.7
 
 toolchain go1.23.4
 
-// replace github.com/chriscow/minds => ../
+replace github.com/chriscow/minds => ../
 
-// replace github.com/chriscow/minds/providers/openai => ../providers/openai
+replace github.com/chriscow/minds/providers/openai => ../providers/openai
 
-// replace github.com/chriscow/minds/providers/gemini => ../providers/gemini
+replace github.com/chriscow/minds/providers/gemini => ../providers/gemini
 
-// replace github.com/chriscow/minds/providers/deepseek => ../providers/deepseek
+replace github.com/chriscow/minds/providers/deepseek => ../providers/deepseek
 
-// replace github.com/chriscow/minds/tools => ../tools
+replace github.com/chriscow/minds/tools => ../tools
 
 require (
+	github.com/chriscow/minds v0.0.4
+	github.com/chriscow/minds/providers/gemini v0.0.0-00010101000000-000000000000
+	github.com/chriscow/minds/providers/openai v0.0.4
+	github.com/chriscow/minds/tools v0.0.0-00010101000000-000000000000
 	github.com/fatih/color v1.18.0
 	golang.org/x/time v0.9.0
 )
@@ -26,10 +30,6 @@ require (
 	cloud.google.com/go/auth/oauth2adapt v0.2.7 // indirect
 	cloud.google.com/go/compute/metadata v0.6.0 // indirect
 	cloud.google.com/go/longrunning v0.6.4 // indirect
-	github.com/chriscow/minds v0.0.4 // indirect
-	github.com/chriscow/minds/providers/gemini v0.0.4 // indirect
-	github.com/chriscow/minds/providers/openai v0.0.4 // indirect
-	github.com/chriscow/minds/tools v0.0.2 // indirect
 	github.com/dlclark/regexp2 v1.11.4 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
