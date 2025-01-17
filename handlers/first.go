@@ -8,7 +8,7 @@ import (
 	"github.com/chriscow/minds"
 )
 
-type anyHandler struct {
+type firstHandler struct {
 	name     string
 	handlers []minds.ThreadHandler
 }
@@ -34,15 +34,15 @@ type anyHandler struct {
 //	    validateB,
 //	    validateC,
 //	)
-func First(name string, handlers ...minds.ThreadHandler) *anyHandler {
-	return &anyHandler{name: name, handlers: handlers}
+func First(name string, handlers ...minds.ThreadHandler) *firstHandler {
+	return &firstHandler{name: name, handlers: handlers}
 }
 
-func (h *anyHandler) String() string {
+func (h *firstHandler) String() string {
 	return fmt.Sprintf("Any(%s: %d handlers)", h.name, len(h.handlers))
 }
 
-func (h *anyHandler) HandleThread(tc minds.ThreadContext, next minds.ThreadHandler) (minds.ThreadContext, error) {
+func (h *firstHandler) HandleThread(tc minds.ThreadContext, next minds.ThreadHandler) (minds.ThreadContext, error) {
 	if len(h.handlers) == 0 {
 		if next != nil {
 			return next.HandleThread(tc, nil)

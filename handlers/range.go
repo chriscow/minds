@@ -7,10 +7,9 @@ import (
 )
 
 type ranger struct {
-	name       string
-	handler    minds.ThreadHandler
-	middleware minds.ThreadHandler
-	values     []interface{}
+	name    string
+	handler minds.ThreadHandler
+	values  []interface{}
 }
 
 // Range creates a handler that processes a thread with a series of values.
@@ -41,10 +40,6 @@ func Range(name string, handler minds.ThreadHandler, values ...interface{}) *ran
 	}
 }
 
-func (r *ranger) Use(handler minds.ThreadHandler) {
-	r.middleware = handler
-}
-
 func (r *ranger) String() string {
 	return fmt.Sprintf("Range: %s", r.name)
 }
@@ -55,18 +50,10 @@ func (r *ranger) HandleThread(tc minds.ThreadContext, next minds.ThreadHandler) 
 		meta["range_value"] = value
 		tc = tc.WithMetadata(meta)
 
-		if r.middleware != nil {
-			var err error
-			tc, err = r.middleware.HandleThread(tc, r.handler)
-			if err != nil {
-				return tc, err
-			}
-		} else {
-			var err error
-			tc, err = r.handler.HandleThread(tc, nil)
-			if err != nil {
-				return tc, err
-			}
+		var err error
+		tc, err = r.handler.HandleThread(tc, nil)
+		if err != nil {
+			return tc, err
 		}
 	}
 

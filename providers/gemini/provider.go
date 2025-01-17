@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/chriscow/minds"
+	retryablehttp "github.com/hashicorp/go-retryablehttp"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 
@@ -26,6 +27,9 @@ type Provider struct {
 // NewProvider creates a new Gemini provider. If no model name is provided, the
 // default model is used, currently "gemini-1.5-flash". The default model can be
 // overridden by setting the GEMINI_DEFAULT_MODEL environment variable.
+//
+// If no http.Client is provided, a default client is created with a retryable
+// http client with a maximum of 10 retries provided by HashiCorp.
 func NewProvider(ctx context.Context, opts ...Option) (*Provider, error) {
 	options := Options{
 		modelName: defaultModel,
@@ -47,9 +51,17 @@ func NewProvider(ctx context.Context, opts ...Option) (*Provider, error) {
 		}
 	}
 
+	if options.httpClient == nil {
+		client := retryablehttp.NewClient()
+		client.RetryMax = 10
+		options.httpClient = client.StandardClient()
+	}
+
 	goptions := []option.ClientOption{
 		option.WithAPIKey(options.apiKey),
+		option.WithHTTPClient(options.httpClient),
 	}
+
 	if options.baseURL != "" {
 		goptions = append(goptions, option.WithEndpoint(options.baseURL))
 	}

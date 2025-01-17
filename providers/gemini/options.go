@@ -1,7 +1,10 @@
 package gemini
 
 import (
+	"net/http"
+
 	"github.com/chriscow/minds"
+	retryablehttp "github.com/hashicorp/go-retryablehttp"
 
 	"github.com/google/generative-ai-go/genai"
 )
@@ -16,6 +19,7 @@ type Options struct {
 	tools           []minds.Tool
 	registry        minds.ToolRegistry
 	systemPrompt    *string
+	httpClient      *http.Client
 }
 
 type Option func(*Options)
@@ -78,5 +82,20 @@ func WithToolRegistry(registry minds.ToolRegistry) Option {
 			panic("cannot set registry when functions are present in existing registry")
 		}
 		o.registry = registry
+	}
+}
+
+func WithClient(client *http.Client) Option {
+	return func(o *Options) {
+		o.httpClient = client
+	}
+}
+
+func WithRetry(max int) Option {
+	return func(o *Options) {
+		client := retryablehttp.NewClient()
+		client.RetryMax = max
+
+		o.httpClient = client.StandardClient()
 	}
 }

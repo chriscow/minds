@@ -1,6 +1,11 @@
 package openai
 
-import "github.com/chriscow/minds"
+import (
+	"net/http"
+
+	"github.com/chriscow/minds"
+	retryablehttp "github.com/hashicorp/go-retryablehttp"
+)
 
 type Options struct {
 	apiKey          string
@@ -12,6 +17,7 @@ type Options struct {
 	tools           []minds.Tool
 	registry        minds.ToolRegistry
 	systemPrompt    *string
+	httpClient      *http.Client
 }
 
 type Option func(*Options)
@@ -75,5 +81,20 @@ func WithToolRegistry(registry minds.ToolRegistry) Option {
 func WithSystemPrompt(prompt string) Option {
 	return func(o *Options) {
 		o.systemPrompt = &prompt
+	}
+}
+
+func WithClient(client *http.Client) Option {
+	return func(o *Options) {
+		o.httpClient = client
+	}
+}
+
+func WithRetry(max int) Option {
+	return func(o *Options) {
+		client := retryablehttp.NewClient()
+		client.RetryMax = max
+
+		o.httpClient = client.StandardClient()
 	}
 }

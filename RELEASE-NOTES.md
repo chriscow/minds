@@ -1,3 +1,97 @@
+## v0.0.5 - 2023-10-05
+
+## Summary
+
+### Added
+- **ThreadContext**: 
+    - Added `SetKeyValue`, changed to copy on write strategy.
+    - Added `Merge` to `Metadata` with merging strategies.
+    - `AppendMessages` no longer returns ThreadContext; mutates in place.
+- **ThreadFlow**: Added `ThreadFlow` scoped middleware handler and handler chains.
+
+
+### Changed
+- **Gemini/OpenAI providers**: Default to retryable HTTP client.
+- **Must Handler**: Now accepts result aggregator.
+- **First, For, Range and Sequential**: Removed `Use` middleware method in lieu of `ThreadFlow` middleware pattern.
+
+
+## New Handlers
+
+### **ThreadFlow**
+ThreadFlow manages multiple handlers and their middleware chains. Handlers are executed
+sequentially, with each handler receiving the result from the previous one. Middleware
+is scoped and applied to handlers added within that scope, allowing different middleware
+combinations for different processing paths.
+
+Example:
+
+	validate := NewValidationHandler()
+	process := NewProcessingHandler()
+	seq := Sequential("main", validate, process)
+
+	// Create flow and add global middleware
+	flow := NewThreadFlow("example")
+	flow.Use(NewLogging("audit"))
+
+	// Add base handlers
+	flow.Handle(seq)
+
+	// Add handlers with scoped middleware
+	flow.Group(func(f *ThreadFlow) {
+	    f.Use(NewRetry("retry", 3))
+	    f.Use(NewTimeout("timeout", 5))
+	    f.Handle(NewContentProcessor("content"))
+	    f.Handle(NewValidator("validate"))
+	})
+
+	result, err := flow.HandleThread(initialContext, nil)
+	if err != nil {
+	    log.Fatalf("Error in flow: %v", err)
+	}
+	fmt.Println("Result:", result.Messages().Last().Content)
+
+## New Middleware
+
+### **Retry**
+Retry creates a middleware that automatically retries failed handler executions
+with configurable backoff and retry criteria.
+
+The middleware supports customization through options including:
+  - Number of retry attempts
+  - Backoff strategy between attempts
+  - Retry criteria based on error evaluation
+  - Timeout propagation control
+
+If no options are provided, the middleware uses default settings:
+  - 3 retry attempts
+  - No delay between attempts
+  - Retries on any error
+  - Timeout propagation enabled
+
+Parameters:
+  - name: Identifier for the middleware instance
+  - opts: Optional configuration using retry.Option functions
+
+Example usage:
+
+	flow.Use(Retry("api-retry",
+	  retry.WithAttempts(5),
+	  retry.WithBackoff(retry.DefaultBackoff(time.Second)),
+	  retry.WithRetryCriteria(func(err error) bool {
+	    return errors.Is(err, io.ErrTemporary)
+	  }),
+	))
+
+The middleware stops retrying if:
+  - An attempt succeeds
+  - The maximum number of attempts is reached
+  - The retry criteria returns false
+  - Context cancellation (if timeout propagation is enabled)
+
+Returns:
+  - A middleware that implements the retry logic around a handler
+
 # v0.0.4
 
 ## Summary

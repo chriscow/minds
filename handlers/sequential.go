@@ -10,7 +10,6 @@ type sequential struct {
 	name         string
 	handlers     []minds.ThreadHandler
 	finalHandler minds.ThreadHandler
-	middlware    minds.ThreadHandler
 }
 
 // Sequential creates a ThreadHandler that executes a series of handlers in sequence.
@@ -43,10 +42,6 @@ func (s *sequential) AddHandlers(handlers ...minds.ThreadHandler) {
 	s.handlers = append(s.handlers, handlers...)
 }
 
-func (s *sequential) Use(handler minds.ThreadHandler) {
-	s.middlware = handler
-}
-
 func (s *sequential) String() string {
 	return fmt.Sprintf("Sequential: %s", s.name)
 }
@@ -61,19 +56,9 @@ func (s *sequential) HandleThread(tc minds.ThreadContext, next minds.ThreadHandl
 	}
 
 	for _, handler := range s.handlers {
-		// Wrap the handler execution with middleware, if present
-		if s.middlware != nil {
-			var err error
-			tc, err = s.middlware.HandleThread(tc, handler)
-			if err != nil {
-				return tc, err
-			}
-		} else {
-			var err error
-			tc, err = handler.HandleThread(tc, nil)
-			if err != nil {
-				return tc, err
-			}
+		tc, err := handler.HandleThread(tc, nil)
+		if err != nil {
+			return tc, err
 		}
 	}
 

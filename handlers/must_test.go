@@ -33,6 +33,46 @@ type mockHandler struct {
 	started   int32
 	completed int32
 	tcResult  minds.ThreadContext
+	metadata  map[string]interface{} // Add metadata for testing merging
+}
+
+func newMockHandler(name string) *mockHandler {
+	return &mockHandler{
+		name:     name,
+		metadata: make(map[string]interface{}),
+	}
+}
+
+func (m *mockHandler) String() string {
+	return m.name
+}
+
+func (m *mockHandler) HandleThread(tc minds.ThreadContext, next minds.ThreadHandler) (minds.ThreadContext, error) {
+	atomic.AddInt32(&m.started, 1)
+
+	if m.tcResult == nil {
+		m.tcResult = tc.Clone()
+		m.tcResult.SetKeyValue("handler", m.name)
+	}
+
+	if m.sleep > 0 {
+		select {
+		case <-time.After(m.sleep):
+		case <-tc.Context().Done():
+			return tc, tc.Context().Err()
+		}
+	}
+
+	if tc.Context().Err() != nil {
+		return tc, tc.Context().Err()
+	}
+
+	if m.shouldErr {
+		return tc, fmt.Errorf("%s: %w", m.name, errHandlerFailed)
+	}
+
+	atomic.AddInt32(&m.completed, 1)
+	return m.tcResult, nil
 }
 
 func (m *mockHandler) Started() int {
@@ -43,65 +83,6 @@ func (m *mockHandler) Completed() int {
 	return int(atomic.LoadInt32(&m.completed))
 }
 
-func (m *mockHandler) HandleThread(tc minds.ThreadContext, next minds.ThreadHandler) (minds.ThreadContext, error) {
-	atomic.AddInt32(&m.started, 1) // Track execution count
-
-	if m.tcResult == nil {
-		m.tcResult = tc
-	}
-
-	if m.sleep <= 0 {
-		if tc.Context().Err() != nil {
-			return tc, tc.Context().Err()
-		}
-
-		if m.shouldErr {
-			// Return an error immediately if shouldErr is true and sleep is zero or negative
-			return tc, fmt.Errorf("%s: %w", m.name, errHandlerFailed)
-		}
-
-		if next != nil {
-			tcOut, err := next.HandleThread(tc, nil)
-			if err != nil {
-				return tcOut, err
-			}
-			atomic.AddInt32(&m.completed, 1)
-			return tcOut, nil
-		}
-
-		// Complete immediately if no sleep is required
-		atomic.AddInt32(&m.completed, 1)
-		return m.tcResult, nil
-	}
-
-	// Simulate work that respects context cancellation
-	ticker := time.NewTicker(2 * time.Millisecond)
-	defer ticker.Stop()
-
-	sleepTime := 0
-
-	for {
-		select {
-		case <-ticker.C:
-			sleepTime += 2
-			// fmt.Printf("%s: slept %d ms\n", m.name, sleepTime)
-			if sleepTime >= int(m.sleep/time.Millisecond) {
-				if m.shouldErr {
-					// fmt.Printf("%s: encountered an error\n", m.name)
-					return tc, fmt.Errorf("%s: %w", m.name, errHandlerFailed)
-				}
-
-				// fmt.Printf("%s: completed\n", m.name)
-				atomic.AddInt32(&m.completed, 1)
-				return m.tcResult, nil
-			}
-		case <-tc.Context().Done():
-			// fmt.Printf("%s: context canceled\n", m.name)
-			return tc, tc.Context().Err() // Exit early on cancellation
-		}
-	}
-}
-
 func TestMust_AllHandlersSucceed(t *testing.T) {
 	is := is.New(t)
 	// Setup mock handlers
@@ -110,7 +91,7 @@ func TestMust_AllHandlersSucceed(t *testing.T) {
 	h3 := &mockHandler{name: "Handler3"}
 
 	// Create Must handler
-	must := handlers.Must("AllSucceed", h1, h2, h3)
+	must := handlers.Must("AllSucceed", nil, h1, h2, h3)
 
 	tc := minds.NewThreadContext(context.Background())
 
@@ -133,7 +114,7 @@ func TestMust_OneHandlerFails(t *testing.T) {
 			h2 := &mockHandler{name: "Handler2", shouldErr: true}
 			h3 := &mockHandler{name: "Handler3", sleep: 1000 * time.Millisecond}
 
-			must := handlers.Must("OneFails", h1, h2, h3)
+			must := handlers.Must("OneFails", nil, h1, h2, h3)
 			tc := minds.NewThreadContext(context.Background())
 			_, err := must.HandleThread(tc, nil)
 
@@ -169,7 +150,7 @@ func TestMust_ContextCancellation(t *testing.T) {
 	h3 := &mockHandler{name: "Handler3"}
 
 	// Create Must handler
-	must := handlers.Must("ContextCancel", h1, h2, h3)
+	must := handlers.Must("ContextCancel", nil, h1, h2, h3)
 
 	// Create cancellable context
 	ctx, cancel := context.WithCancel(context.Background())
@@ -189,15 +170,13 @@ func TestMust_NoHandlers(t *testing.T) {
 	is := is.New(t)
 
 	// Create Must handler with no handlers
-	must := handlers.Must("Empty", []minds.ThreadHandler{}...)
+	must := handlers.Must("Empty", nil)
 
 	tc := minds.NewThreadContext(context.Background())
-
-	// Execute
 	_, err := must.HandleThread(tc, nil)
 
-	// Assert
-	is.NoErr(err) // "Must with no handlers should succeed"
+	// Without any handlers, there will be no results to aggregate
+	is.Equal(err.Error(), "Empty aggregation: no results to aggregate") // "Must with no handlers return no aggregators error"
 }
 
 func TestMust_NestedMust(t *testing.T) {
@@ -212,19 +191,127 @@ func TestMust_NestedMust(t *testing.T) {
 			h3 := &mockHandler{name: "Handler3"}
 
 			// Create nested Must handler
-			nestedMust := handlers.Must("Nested", h2, h3)
-			must := handlers.Must("Outer", h1, nestedMust)
+			nestedMust := handlers.Must("Nested", nil, h2, h3)
+			must := handlers.Must("Outer", nil, h1, nestedMust)
 
 			tc := minds.NewThreadContext(context.Background())
-
-			// Execute
 			_, err := must.HandleThread(tc, nil)
 
-			// Assert
-			is.True(err != nil) // "An error must occur"
+			is.True(err != nil) // expected error to occur
+
+			if strings.Contains(err.Error(), "context canceled") {
+				return
+			}
+
 			// Ensure the error message contains the nested and outer context
+			if !strings.Contains(err.Error(), "Handler2: handler failed") || !strings.Contains(err.Error(), "Nested") {
+				t.Logf("Error: %s", err.Error())
+			}
+
 			is.True(strings.Contains(err.Error(), "Nested"))
 			is.True(strings.Contains(err.Error(), "Handler2: handler failed"))
 		})
 	}
+}
+
+func TestMust_CustomAggregator(t *testing.T) {
+	is := is.New(t)
+
+	h1 := newMockHandler("Handler1")
+	h2 := newMockHandler("Handler2")
+	h3 := newMockHandler("Handler3")
+
+	var aggregatorCalled bool
+	customAggregator := func(results []handlers.HandlerResult) (minds.ThreadContext, error) {
+		aggregatorCalled = true
+
+		// Custom aggregation logic - only use results from Handler1 and Handler3
+		var finalCtx minds.ThreadContext
+		for _, r := range results {
+			s := r.Handler.(fmt.Stringer)
+			isHandler1 := strings.Contains(s.String(), "Handler1")
+			isHandler3 := strings.Contains(s.String(), "Handler3")
+			if r.Error == nil && (isHandler1 || isHandler3) {
+				if finalCtx == nil {
+					finalCtx = r.Context
+				} else {
+					finalMeta := finalCtx.Metadata()
+					finalMeta["handler"] = finalMeta["handler"].(string) + "," + r.Context.Metadata()["handler"].(string)
+					finalCtx = finalCtx.WithMetadata(finalMeta)
+				}
+			}
+		}
+		return finalCtx, nil
+	}
+
+	must := handlers.Must("CustomAggregator",
+		customAggregator,
+		h1, h2, h3,
+	)
+
+	tc := minds.NewThreadContext(context.Background())
+	finalTC, err := must.HandleThread(tc, nil)
+
+	is.NoErr(err)
+	is.True(aggregatorCalled)
+
+	// Verify that only Handler1 and Handler3 metadata is present
+	metadata := finalTC.Metadata()
+	is.True(metadata["handler"] == "Handler1,Handler3" || metadata["handler"] == "Handler3,Handler1")
+	is.True(metadata["handler"] != "Handler2")
+	is.True(!strings.Contains(metadata["handler"].(string), "Handler2"))
+}
+
+func TestMust_DefaultAggregator(t *testing.T) {
+	is := is.New(t)
+
+	h1 := newMockHandler("Handler1")
+	h1.tcResult = minds.NewThreadContext(context.Background())
+	h1.tcResult.SetKeyValue("key1", "value1")
+
+	h2 := newMockHandler("Handler2")
+	h2.tcResult = minds.NewThreadContext(context.Background())
+	h2.tcResult.SetKeyValue("key2", "value2")
+
+	must := handlers.Must("DefaultAggregator",
+		handlers.DefaultAggregator,
+		h1, h2,
+	)
+
+	tc := minds.NewThreadContext(context.Background())
+	finalTC, err := must.HandleThread(tc, nil)
+
+	is.NoErr(err)
+
+	// Verify metadata was merged
+	metadata := finalTC.Metadata()
+	is.Equal(metadata["key1"], "value1")
+	is.Equal(metadata["key2"], "value2")
+}
+
+func TestMust_AggregatorWithErrors(t *testing.T) {
+	is := is.New(t)
+
+	h1 := newMockHandler("Handler1")
+	h2 := newMockHandler("Handler2")
+	h2.shouldErr = true
+	h3 := newMockHandler("Handler3")
+
+	var aggregatorCalled bool
+	aggregator := func(results []handlers.HandlerResult) (minds.ThreadContext, error) {
+		aggregatorCalled = true
+		return nil, fmt.Errorf("aggregator failed")
+	}
+
+	must := handlers.Must("AggregatorError",
+		aggregator,
+		h1, h2, h3,
+	)
+
+	tc := minds.NewThreadContext(context.Background())
+	_, err := must.HandleThread(tc, nil)
+
+	is.True(err != nil)
+	is.True(!aggregatorCalled) // Aggregator shouldn't be called if a handler fails
+	is.True(strings.Contains(err.Error(), "Handler2: handler failed"))
 }

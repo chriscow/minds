@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/chriscow/minds"
+	retryablehttp "github.com/hashicorp/go-retryablehttp"
 
 	"github.com/sashabaranov/go-openai"
 )
@@ -29,7 +30,14 @@ func NewProvider(opts ...Option) (*Provider, error) {
 		return nil, fmt.Errorf("failed to set up options: %w", err)
 	}
 
+	if options.httpClient == nil {
+		client := retryablehttp.NewClient()
+		client.RetryMax = 10
+		options.httpClient = client.StandardClient()
+	}
+
 	config := openai.DefaultConfig(options.apiKey)
+	config.HTTPClient = options.httpClient
 	if options.baseURL != "" {
 		config.BaseURL = options.baseURL
 	}

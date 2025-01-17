@@ -62,25 +62,6 @@ func TestRangeHandler_WithError(t *testing.T) {
 	is.Equal(0, final.Completed())   // final handler shouldn't execute after error
 }
 
-func TestRangeHandler_WithMiddleware(t *testing.T) {
-	is := is.New(t)
-	handler := &mockHandler{name: "handler"}
-	middleware := &mockHandler{name: "middleware"}
-	final := &mockHandler{name: "final"}
-	values := []interface{}{"a", "b", "c"}
-
-	ranger := handlers.Range("test", handler, values...)
-	ranger.Use(middleware)
-
-	tc := minds.NewThreadContext(context.Background())
-	_, err := ranger.HandleThread(tc, final)
-
-	is.NoErr(err)
-	is.Equal(3, handler.Completed())    // Handler executes for each value
-	is.Equal(3, middleware.Completed()) // Middleware executes for each value
-	is.Equal(1, final.Completed())      // Final handler executes once
-}
-
 func TestRangeHandler_ValueInContext(t *testing.T) {
 	is := is.New(t)
 	values := []interface{}{"a", "b", "c"}

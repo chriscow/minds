@@ -8,7 +8,64 @@ import (
 	"github.com/chriscow/minds"
 )
 
-// Must creates a handler that runs multiple handlers in parallel with all-success semantics.
+type mustHandler struct {
+	name       string
+	handlers   []minds.ThreadHandler
+	aggregator ResultAggregator
+}
+
+type HandlerResult struct {
+	Handler minds.ThreadHandler
+	Context minds.ThreadContext
+	Error   error
+}
+
+type ResultAggregator func([]HandlerResult) (minds.ThreadContext, error)
+
+// DefaultAggregator combines results by merging contexts in order. Merging is done by
+// starting with the first successful context and merging all subsequent successful
+// contexts into it. If no successful contexts are found, an error is returned.
+//
+// Metadata merging is done with the minds.KeepNew strategy, which overwrites existing
+// values with new values. Messages are appended in order.
+//
+// Parameters:
+//   - results: List of handler results to aggregate.
+//
+// Returns:
+//   - A single thread context that combines all successful results.
+func DefaultAggregator(results []HandlerResult) (minds.ThreadContext, error) {
+	if len(results) == 0 {
+		return nil, fmt.Errorf("no results to aggregate")
+	}
+
+	// Start with the first successful context
+	var base minds.ThreadContext
+	for _, r := range results {
+		if r.Error == nil && r.Context != nil {
+			base = r.Context
+			break
+		}
+	}
+
+	if base == nil {
+		return nil, fmt.Errorf("no successful results found")
+	}
+
+	// Merge remaining successful contexts
+	for _, r := range results {
+		if r.Error != nil || r.Context == nil {
+			continue
+		}
+		if r.Context != base { // Skip if it's the same context we started with
+			base = mergeContexts(base, r.Context)
+		}
+	}
+
+	return base, nil
+}
+
+// Must returns a handler that runs multiple handlers in parallel with all-success semantics.
 //
 // All handlers execute concurrently and must complete successfully. If any handler fails,
 // remaining handlers are canceled and the first error encountered is returned. The timing
@@ -28,15 +85,17 @@ import (
 //	    validateB,
 //	    validateC,
 //	)
-type mustHandler struct {
-	name     string
-	handlers []minds.ThreadHandler
-}
+func Must(name string, agg ResultAggregator, handlers ...minds.ThreadHandler) *mustHandler {
+	if agg == nil {
+		agg = DefaultAggregator
+	}
 
-// Must creates a handler that ensures all provided handlers succeed in parallel.
-// If any handler fails, the others are canceled, and the first error is returned.
-func Must(name string, handlers ...minds.ThreadHandler) *mustHandler {
-	return &mustHandler{name: name, handlers: handlers}
+	h := &mustHandler{
+		name:       name,
+		handlers:   handlers,
+		aggregator: agg,
+	}
+	return h
 }
 
 func (h *mustHandler) String() string {
@@ -54,63 +113,90 @@ func (h *mustHandler) HandleThread(tc minds.ThreadContext, next minds.ThreadHand
 	tc = tc.WithContext(ctx)
 
 	var wg sync.WaitGroup
-	errChan := make(chan error, len(h.handlers))
+	resultChan := make(chan HandlerResult, len(h.handlers))
 
 	// Launch each handler
 	for _, handler := range h.handlers {
 		wg.Add(1)
 		go func(handler minds.ThreadHandler) {
 			defer wg.Done()
+
+			result := HandlerResult{Handler: handler}
+
 			if ctx.Err() != nil {
+				result.Error = ctx.Err()
+				resultChan <- result
 				return
 			}
-			if _, err := handler.HandleThread(tc, nil); err != nil {
-				select {
-				case errChan <- fmt.Errorf("%s: %w", h.name, err): // Wrap the error
-					cancel()
-				default:
-				}
+
+			newCtx, err := handler.HandleThread(tc, nil)
+			result.Context = newCtx
+			result.Error = err
+
+			if err != nil {
+				result.Error = fmt.Errorf("%s: %w", h.name, err)
+				cancel() // Cancel other handlers on first error
 			}
+
+			resultChan <- result
 		}(handler)
 	}
 
-	// Close the channel once all handlers are done
+	// Close channel when all handlers complete
 	go func() {
 		wg.Wait()
-		close(errChan)
+		close(resultChan)
 	}()
 
-	// Check errors
-	var handlerError error
+	var results []HandlerResult
+	var firstError error
+
+	// Collect results
 	for {
 		select {
-		case err, ok := <-errChan:
+		case result, ok := <-resultChan:
 			if !ok {
-				// No more errors
-				if handlerError != nil {
-					return tc, handlerError
+				// No more results
+				if firstError != nil {
+					return tc, firstError
 				}
+
+				// Use aggregator to combine results
+				finalTC, err := h.aggregator(results)
+				if err != nil {
+					return tc, fmt.Errorf("%s aggregation: %w", h.name, err)
+				}
+
 				if next != nil {
-					return next.HandleThread(tc, nil)
+					return next.HandleThread(finalTC, nil)
 				}
-				return tc, nil
+				return finalTC, nil
 			}
-			// Capture the first HandlerError
-			if handlerError == nil {
-				handlerError = err
+
+			results = append(results, result)
+			if result.Error != nil && firstError == nil {
+				firstError = result.Error
 			}
 
 		case <-ctx.Done():
-			// Ensure errors from errChan take precedence over context cancellation
-			for err := range errChan {
-				if handlerError == nil {
-					handlerError = err
+			// Drain remaining results
+			for result := range resultChan {
+				results = append(results, result)
+				if result.Error != nil && firstError == nil {
+					firstError = result.Error
 				}
 			}
-			if handlerError != nil {
-				return tc, handlerError
+			if firstError != nil {
+				return tc, firstError
 			}
 			return tc, ctx.Err()
 		}
 	}
+}
+
+func mergeContexts(base, new minds.ThreadContext) minds.ThreadContext {
+	mergedMeta := base.Metadata().Merge(new.Metadata(), minds.KeepNew)
+	base = base.WithMetadata(mergedMeta)
+	base.AppendMessages(new.Messages()...)
+	return base
 }

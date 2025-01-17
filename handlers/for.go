@@ -9,7 +9,6 @@ import (
 type looper struct {
 	name       string
 	handler    minds.ThreadHandler
-	middleware minds.ThreadHandler
 	iterations int // number of times to cycle, 0 means infinite
 	continueFn ForConditionFn
 }
@@ -45,10 +44,6 @@ func For(name string, iterations int, handler minds.ThreadHandler, fn ForConditi
 	}
 }
 
-func (c *looper) Use(handler minds.ThreadHandler) {
-	c.middleware = handler
-}
-
 func (c *looper) String() string {
 	return fmt.Sprintf("For: %s", c.name)
 }
@@ -59,18 +54,10 @@ func (c *looper) HandleThread(tc minds.ThreadContext, next minds.ThreadHandler) 
 		if c.continueFn != nil && !c.continueFn(tc, iter) {
 			break
 		}
-		if c.middleware != nil {
-			var err error
-			tc, err = c.middleware.HandleThread(tc, c.handler)
-			if err != nil {
-				return tc, err
-			}
-		} else {
-			var err error
-			tc, err = c.handler.HandleThread(tc, nil)
-			if err != nil {
-				return tc, err
-			}
+		var err error
+		tc, err = c.handler.HandleThread(tc, nil)
+		if err != nil {
+			return tc, err
 		}
 		iter++
 	}

@@ -30,7 +30,7 @@ func TestThreadContext(t *testing.T) {
 
 		is.True(len(tc.Messages()) == 0)
 
-		tc = tc.AppendMessages(msg)
+		tc.AppendMessages(msg)
 		msgs := tc.Messages()
 
 		is.Equal(len(msgs), 1)

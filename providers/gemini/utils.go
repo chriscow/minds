@@ -16,5 +16,9 @@ func Ask(ctx context.Context, prompt string, opts ...Option) (string, error) {
 	resp, err := llm.GenerateContent(ctx, minds.Request{
 		Messages: minds.Messages{{Content: prompt}}})
 
+	if err != nil {
+		return "", fmt.Errorf("failed to generate content: %v", err)
+	}
+
 	return resp.String(), err
 }
