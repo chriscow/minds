@@ -11,7 +11,7 @@ require (
 )
 
 require (
-	github.com/chriscow/minds v0.0.4 // indirect
+	github.com/chriscow/minds v0.0.5 // indirect
 	github.com/dlclark/regexp2 v1.9.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
