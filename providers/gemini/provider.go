@@ -8,7 +8,6 @@ import (
 	"os"
 
 	"github.com/chriscow/minds"
-	retryablehttp "github.com/hashicorp/go-retryablehttp"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 
@@ -51,11 +50,11 @@ func NewProvider(ctx context.Context, opts ...Option) (*Provider, error) {
 		}
 	}
 
-	if options.httpClient == nil {
-		client := retryablehttp.NewClient()
-		client.RetryMax = 10
-		options.httpClient = client.StandardClient()
-	}
+	// if options.httpClient == nil {
+	// 	client := retryablehttp.NewClient()
+	// 	client.RetryMax = 10
+	// 	options.httpClient = client.StandardClient()
+	// }
 
 	goptions := []option.ClientOption{
 		option.WithAPIKey(options.apiKey),

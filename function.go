@@ -26,7 +26,8 @@ type functionWrapper struct {
 	impl        CallableFunc // The actual function to call
 }
 
-func WrapFunction(name, description string, args interface{}, fn CallableFunc) (Tool, error) {
+// WrapFunction takes a `CallableFunc` and wraps it as a `minds.Tool` with the provided name and description.
+func WrapFunction(name, description string, args interface{}, fn CallableFunc) (*functionWrapper, error) {
 	// Validate that fn is actually a function
 	fnType := reflect.TypeOf(args)
 
@@ -81,6 +82,10 @@ func (f *functionWrapper) Parameters() Definition { return f.argsSchema }
 
 func (f *functionWrapper) Call(ctx context.Context, params []byte) ([]byte, error) {
 	return f.impl(ctx, params)
+}
+
+func (f *functionWrapper) HandleThread(ctx ThreadContext, next ThreadHandler) (ThreadContext, error) {
+	return ctx, nil
 }
 
 // HandleFunctionCalls takes an array of ToolCalls and executes the functions they represent

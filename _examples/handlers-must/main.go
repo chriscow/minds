@@ -34,32 +34,26 @@ func main() {
 	//
 	// Some example message threads to test the validation pipeline
 	//
-	jargon := minds.NewThreadContext(context.Background()).WithMessages(minds.Messages{
-		{
-			Role: minds.RoleUser,
-			Content: `Leveraging our synergistic capabilities, we aim to 
+	jargon := minds.NewThreadContext(context.Background()).WithMessages(minds.Message{
+		Role: minds.RoleUser,
+		Content: `Leveraging our synergistic capabilities, we aim to 
 				proactively optimize cross-functional alignment and drive 
 				scalable value-add solutions for our stakeholders. By 
 				implementing a paradigm-shifting approach to our core 
 				competencies, we can seamlessly catalyze transformative 
 				outcomes. This ensures a robust framework for sustained 
 				competitive differentiation in a dynamic market landscape.`,
-		},
 	})
 
-	dad := minds.NewThreadContext(context.Background()).WithMessages(minds.Messages{
-		{
-			Role:    minds.RoleUser,
-			Content: "Hi hungry, I'm dad",
-		},
+	dad := minds.NewThreadContext(context.Background()).WithMessages(minds.Message{
+		Role:    minds.RoleUser,
+		Content: "Hi hungry, I'm dad",
 	})
 
-	coffee := minds.NewThreadContext(context.Background()).WithMessages(minds.Messages{
-		{
-			Role: minds.RoleUser,
-			Content: "Why didn't the coffee file a police report? Because it got mugged! " +
-				"Speaking of which, time for cup number 6!",
-		},
+	coffee := minds.NewThreadContext(context.Background()).WithMessages(minds.Message{
+		Role: minds.RoleUser,
+		Content: "Why didn't the coffee file a police report? Because it got mugged! " +
+			"Speaking of which, time for cup number 6!",
 	})
 
 	// Final handler (end of the pipeline)
@@ -123,5 +117,5 @@ func validationPipeline(llm minds.ContentGenerator) minds.ThreadHandler {
 		),
 	}
 
-	return handlers.Must("validators-must-succeed", validators...)
+	return handlers.Must("validators-must-succeed", nil, validators...)
 }

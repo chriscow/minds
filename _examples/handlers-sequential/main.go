@@ -8,11 +8,8 @@ import (
 
 	"github.com/chriscow/minds"
 	"github.com/chriscow/minds/handlers"
-	"github.com/chriscow/minds/providers/gemini"
 	"github.com/chriscow/minds/providers/openai"
 )
-
-const prompt = "What is the meaning of life?"
 
 // This example demonstrates the `Sequential` handler.  The `Sequential` handler
 // executes each handler in order. Here we compose multiple handlers into a
@@ -24,94 +21,42 @@ func main() {
 
 	ctx := context.Background()
 
-	llm := getGeminiProvider(ctx)
-	runPipeline(ctx, llm)
+	managerPrompt := `You are a pointy-haired boss from Dilbert. You speak in management buzzwords
+	and crazy ideas. Keep responses short and focused on maximizing synergy and
+	disrupting paradigms. You have no technical understanding but pretend you do.
+	Never break character. Prefix your response with [Boss:]`
 
-	llm = getOpenAIProvider()
-	runPipeline(ctx, llm)
-}
+	engineerPrompt := `You are Dilbert, a cynical software engineer. You respond to management 
+	with dry wit and technical accuracy while pointing out logical flaws. Keep responses
+	short and sardonic. Never break character. Prefix your response with [Dilbert:]`
 
-func runPipeline(ctx context.Context, llm minds.ThreadHandler) {
-	// Compose the handlers into a single pipeline.
-	// The pipeline is an ordered list of handlers that each process the thread in some way.
-	// The final handler in the pipeline is responsible for handling the final result.
-	pipeline := handlers.Sequential("pipeline", firstHandler(), llm)
-	pipeline.Use(validateMiddlware())
+	manager, err := openai.NewProvider(openai.WithSystemPrompt(managerPrompt))
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	// Initial message thread to start things off
-	initialThread := minds.NewThreadContext(ctx).WithMessages(minds.Message{
-		Role: minds.RoleUser, Content: prompt,
+	engineer, err := openai.NewProvider(openai.WithSystemPrompt(engineerPrompt))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	tc := minds.NewThreadContext(ctx).WithMessages(minds.Message{
+		Role: minds.RoleUser, Content: "We need to leverage blockchain AI to disrupt our coffee machine's paradigm",
 	})
 
-	// Final handler (end of the pipeline)
-	finalHandler := minds.ThreadHandlerFunc(func(tc minds.ThreadContext, next minds.ThreadHandler) (minds.ThreadContext, error) {
-		fmt.Println("[finalHandler]: \n\n" + tc.Messages().Last().Content)
-		return tc, nil
-	})
-
-	// Execute the pipeline
-	if _, err := pipeline.HandleThread(initialThread, finalHandler); err != nil {
-		log.Fatalf("Handler chain failed: %v", err)
-	}
-}
-
-func firstHandler() minds.ThreadHandlerFunc {
-	return func(tc minds.ThreadContext, next minds.ThreadHandler) (minds.ThreadContext, error) {
-		fmt.Println("[exampleHandler]")
-
-		//
-		// Pass the tread to the next handler in the chain
-		//
-		if next != nil {
-			return next.HandleThread(tc, nil)
-		}
-
-		return tc, nil
-	}
-}
-
-// Middleware are ThreadHandlers like any other, but they are used to wrap other handlers
-// to provide additional functionality, such as validation, logging, or error handling.
-func validateMiddlware() minds.ThreadHandlerFunc {
-	return func(tc minds.ThreadContext, next minds.ThreadHandler) (minds.ThreadContext, error) {
-		if len(tc.Messages()) == 0 {
-			return tc, fmt.Errorf("thread has no messages")
-		}
-
-		// TODO: validate the input thread before processing
-		fmt.Println("[validator in] Validated thread before processing")
-
-		if next != nil {
-			var err error
-			tc, err = next.HandleThread(tc, nil)
-			if err != nil {
-				return tc, err
-			}
-		}
-
-		// TODO: validate the output thread after processing
-		fmt.Println("[validator out] Validated thread after processing")
-
-		return tc, nil
-	}
-}
-
-func getGeminiProvider(ctx context.Context) minds.ThreadHandler {
-	// These provider implementations also implement the `ThreadHandler` interface
-	llm, err := gemini.NewProvider(ctx)
+	comic := handlers.Sequential("comic", manager, engineer, manager, engineer)
+	result, err := comic.HandleThread(tc, comic)
 	if err != nil {
-		log.Fatalf("failed to create LLM provider: %v", err)
+		log.Fatal(err)
 	}
 
-	return llm
-}
-
-func getOpenAIProvider() minds.ThreadHandler {
-	// These provider implementations also implement the `ThreadHandler` interface
-	llm, err := openai.NewProvider()
-	if err != nil {
-		log.Fatalf("failed to create LLM provider: %v", err)
+	for _, message := range result.Messages() {
+		fmt.Printf("%s\n", message.Content)
 	}
 
-	return llm
+	// Output should look something like:
+	// Boss: We need to synergize our coffee consumption metrics with blockchain-enabled AI...
+	// Dilbert: So... you want to put a computer chip in the coffee maker?
+	// Boss: Exactly! And we'll call it CoffeeChain 3.0 - it's like Web3 but for caffeine...
+	// Dilbert: *sigh* I'll just order a new Mr. Coffee from Amazon.
 }

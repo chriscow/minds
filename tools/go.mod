@@ -15,8 +15,8 @@ require (
 )
 
 require (
-	github.com/chriscow/minds v0.0.4 // indirect
-	github.com/chriscow/minds/providers/openai v0.0.4 // indirect
+	github.com/chriscow/minds v0.0.5 // indirect
+	github.com/chriscow/minds/providers/openai v0.0.5 // indirect
 	github.com/dlclark/regexp2 v1.11.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/sashabaranov/go-openai v1.36.1 // indirect

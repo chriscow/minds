@@ -1,25 +1,19 @@
-
 # Minds Toolkit
 
-A lightweight Go library for building LLM-based applications through the
-composition of handlers, inspired by the `http.Handler` middleware pattern.
+A lightweight Go library for building LLM-based applications through composable handlers, inspired by the `http.Handler` middleware pattern.
 
-This toolkit takes inspiration from LangChain's runnables and addresses the need
-for a modular, extensible framework for conversational AI development in Go. By
-leveraging Go's idiomatic patterns, the library provides a composable middleware
-design tailored to processing message threads.
+Minds Toolkit provides a modular and extensible framework for conversational AI development in Go. It leverages Go's idiomatic patterns to create a composable middleware design tailored for processing message threads. The framework supports both LLMs and tool integrations, with built-in implementations for OpenAI, Google's Gemini, and a suite of tools in the `minds/openai`, `minds/gemini`, and `minds/tools` modules.
 
-The framework applies the same handler-based design to both LLMs and tool
-integrations. It includes implementations for OpenAI and Google's Gemini, as
-well as a suite of tools in the `minds/openai`, `minds/gemini`, and
-`minds/tools` modules.
+---
 
 ## Features
 
-- **Composable Middleware**: Build complex pipelines for handling message threads with composable, reusable handlers.
-- **Extensible Design**: Add custom handlers and integrate external APIs with ease.
+- **Composable Middleware**: Build complex pipelines for handling message threads with reusable handlers.
+- **Extensible Design**: Easily add custom handlers and integrate external APIs.
 - **Integration Tools**: Built-in support for LLM providers and tools for generative AI workflows.
 - **Testing-Friendly**: Well-structured interfaces and unit-tested components for robust development.
+
+---
 
 ## Installation
 
@@ -27,22 +21,20 @@ well as a suite of tools in the `minds/openai`, `minds/gemini`, and
 go get github.com/chriscow/minds
 ```
 
-The Minds Toolkit is designed to minimize dependencies in your project. You can
-selectively include only the providers you need. For example, if you need the
-OpenAI or Gemini providers, you can install them separately:
+The Minds Toolkit is designed to minimize dependencies. You can selectively include only the providers you need:
 
 ```bash
 go get github.com/chriscow/minds/openai
 go get github.com/chriscow/minds/gemini
 ```
 
-Similarly, tools are available as separate modules:
+For tools, install the `minds/tools` module:
 
 ```bash
 go get github.com/chriscow/minds/tools
 ```
 
-Since the examples have many dependencies, you should:
+To run examples:
 
 ```bash
 cd _examples
@@ -50,11 +42,13 @@ go mod tidy
 go run ./chat-completion-provider/
 ```
 
+---
+
 ## Usage
 
-### Basic Example
+### Basic Example: Joke Competition
 
-Here’s how you can compose handlers for processing a thread. This demonstrates a Joke Competition where two LLMs battle it out telling jokes to each other. We use the `For` handler to limit the number of rounds to 5.  See the `_examples/middleware-ratelimit` example for the full code.
+This example demonstrates a Joke Competition where two LLMs exchange jokes. The `For` handler limits the interaction to 5 rounds. See the `_examples/middleware-ratelimit` example for the full code.
 
 ```mermaid
 ---
@@ -71,14 +65,13 @@ D -->|Joke| F[OpenAI]
 F -->|Joke 2| C
 ```
 
-
 ```go
 func main() {
 	ctx := context.Background()
 	geminiJoker, _ := gemini.NewProvider(ctx)
 	openAIJoker, _ := openai.NewProvider()
 
-	// Create a rate limiter that allows 1 request every 5 seconds
+	// Rate limiter: 1 request every 5 seconds
 	limiter := NewRateLimiter("rate_limiter", 1, 5*time.Second)
 
 	printJoke := minds.ThreadHandlerFunc(func(tc minds.ThreadContext, next minds.ThreadHandler) (minds.ThreadContext, error) {
@@ -86,7 +79,7 @@ func main() {
 		return tc, nil
 	})
 
-	// Create a cycle that alternates between both LLMs, each followed by printing the joke
+	// Create a cycle alternating between Gemini and OpenAI
 	jokeExchange := handlers.For("joke_exchange", 5,
 		geminiJoker,
 		printJoke,
@@ -101,16 +94,18 @@ func main() {
 		{Role: minds.RoleUser, Content: prompt},
 	})
 
-	// Let them exchange jokes until context is canceled
+	// Run the joke exchange
 	if _, err := jokeExchange.HandleThread(initialThread, nil); err != nil {
 		log.Fatalf("Error in joke exchange: %v", err)
 	}
 }
 ```
 
+---
+
 ### Adding a Calculator Tool
 
-The library supports Lua and Starlark as tools for LLMs to perform mathematical operations. Here's how to integrate a calculator:
+The library supports Lua and Starlark for mathematical operations. Here's how to integrate a calculator:
 
 ```go
 func main() {
@@ -125,13 +120,123 @@ func main() {
 }
 ```
 
-## Documentation
+---
 
-Refer to the `_examples` provided for guidance on how to use the modules.
+### ThreadFlow: Managing Middleware and Handlers
+
+The **ThreadFlow** handler acts as a top-level component for managing middleware and handlers. It allows you to:
+- Add global middleware that applies to all handlers.
+- Group handlers and apply middleware specific to that group.
+
+This is particularly useful for organizing complex conversation processing pipelines, where different stages may require different middleware (e.g., logging, retries, timeouts).
+
+---
+
+#### Example: ThreadFlow with Middleware
+
+```mermaid
+---
+title: ThreadFlow with Middleware
+config:
+ look: handDrawn
+---
+flowchart TD
+A[Initial Message] --> B[ThreadFlow]
+B --> C[Global Middleware: Logging]
+C --> D{Group?}
+D -->|Yes| E[Group Middleware: Retry]
+E --> F[Handler 1: Validate Input]
+F --> G[Handler 2: Generate Response]
+D -->|No| H[Handler 3: Process Output]
+H --> I[Next Handler]
+```
+
+```go
+func main() {
+	flow := NewThreadFlow("conversation")
+	flow.Use(NewLogging("audit")) // Global middleware
+
+	// Base handler for input validation
+	flow.Handle(validateInput)
+
+	// Group with specific middleware
+	flow.Group(func(f *ThreadFlow) {
+		f.Use(NewRetry("retry", 3))    // Retry up to 3 times
+		f.Use(NewTimeout("timeout", 5)) // Timeout after 5 seconds
+		f.Handle(generateResponse)      // Handler for LLM response
+		f.Handle(validateOutput)        // Handler for output validation
+	})
+
+	// Initial thread
+	initialThread := minds.NewThreadContext(context.Background()).WithMessages(minds.Messages{
+		{Role: minds.RoleUser, Content: "Hello, world!"},
+	})
+
+	// Process the thread
+	result, err := flow.HandleThread(initialThread, nil)
+	if err != nil {
+		log.Fatalf("Error in flow: %v", err)
+	}
+	fmt.Println("Result:", result.Messages().Last().Content)
+}
+```
+
+---
+
+#### Key Features of ThreadFlow
+
+1. **Global Middleware**: Middleware added with `Use()` applies to all handlers in the flow.
+   ```go
+   flow.Use(NewLogging("audit"))
+   ```
+
+2. **Grouped Middleware**: Middleware added within a `Group()` applies only to handlers in that group.
+   ```go
+   flow.Group(func(f *ThreadFlow) {
+       f.Use(NewRetry("retry", 3))
+       f.Handle(generateResponse)
+   })
+   ```
+
+3. **Sequential Execution**: Handlers are executed in the order they are added, with middleware wrapping each handler.
+
+4. **Error Handling**: If a handler fails, the error is propagated, and the flow stops unless middleware (e.g., retry) handles it.
+
+---
+
+#### Why Use ThreadFlow?
+
+- **Modularity**: Organize your conversation processing logic into reusable groups.
+- **Flexibility**: Apply different middleware to different parts of the pipeline.
+- **Control**: Fine-tune how and when middleware is applied.
+- **Debugging**: Logging and other middleware make it easier to trace issues.
+
+---
+
+### Integration with Other Handlers
+
+ThreadFlow can be combined with other handlers like `First`, `Must`, and `For` to build even more powerful pipelines. For example:
+
+```go
+flow := NewThreadFlow("complex-pipeline")
+flow.Use(NewLogging("audit"))
+
+flow.Group(func(f *ThreadFlow) {
+    f.Use(NewTimeout("timeout", 10))
+    f.Handle(handlers.First("fallback",
+        generateResponseWithGPT4,
+        generateResponseWithGemini,
+    ))
+})
+
+result, err := flow.HandleThread(initialThread, nil)
+```
+
+---
 
 ## Handler Examples
 
-The Minds toolkit uses composable handlers that implement the `ThreadHandler` interface:
+Minds Toolkit uses composable handlers that implement the `ThreadHandler` interface:
 
 ```go
 type ThreadHandler interface {
@@ -139,7 +244,7 @@ type ThreadHandler interface {
 }
 ```
 
-Handlers can include middleware through the `Use()` method, allowing for cross-cutting concerns like logging, rate limiting, or validation:
+Handlers can include middleware via the `Use()` method, enabling cross-cutting concerns like logging, rate limiting, or validation:
 
 ```go
 limiter := NewRateLimiter(1, 5*time.Second)
@@ -147,27 +252,29 @@ handler := Sequential("example",
     validateHandler,
     llmHandler,
 )
-handler.Use(limiter) // Apply rate limiting to all handlers in sequence
+handler.Use(limiter) // Apply rate limiting to all handlers
 ```
 
-The core handler types include:
+### Core Handler Types
 
-- **Sequential**: Runs a set of handlers in order
-- **For**: Repeats a handler chain for a specified number of iterations
-- **Must**: Runs multiple handlers in parallel, requiring all to succeed
-- **First**: Executes handlers in parallel, using the first successful result
-- **Range**: Processes a sequence of values through a handler chain
-- **Policy**: Uses LLM to validate thread content against policies
+- **Sequential**: Runs handlers in order.
+- **For**: Repeats a handler chain for a specified number of iterations.
+- **Must**: Runs handlers in parallel, requiring all to succeed.
+- **First**: Executes handlers in parallel, using the first successful result.
+- **Range**: Processes a sequence of values through a handler chain.
+- **Policy**: Uses LLM to validate thread content against policies.
 
-The following examples demonstrate some common handler composition patterns...
+---
 
-### Parallel Validation 
-All handlers will be executed in parallel and must all succeed otherwise an error is returned.
+### Parallel Validation
+
+All handlers execute in parallel and must succeed; otherwise, an error is returned.
+
 ```go
 validate := handlers.Must("validation",
-    handlers.NewFormatValidator(),      // you provide these handlers
-    handlers.NewLengthValidator(1000),  // ...
-    handlers.NewContentScanner(),       // ...
+    handlers.NewFormatValidator(),
+    handlers.NewLengthValidator(1000),
+    handlers.NewContentScanner(),
 )
 ```
 
@@ -184,17 +291,17 @@ graph TD
     B -->|Parallel| C3[Scan Content]
 ```
 
+---
 
 ### Fallback Processing
 
-All handlers executed in parallel. First handler to succceed cancels all others.
+Executes handlers in parallel; the first successful result cancels the rest.
 
 ```go
 gpt4 := openai.NewProvider()
 claude := anthropic.NewProvider()
 gemini := gemini.NewProvider()
 
-// first successfull response cancels others
 first := handlers.First("generate", gpt4, claude, gemini)
 ```
 
@@ -211,15 +318,15 @@ D -->|Parallel| E2[Try Claude]
 D -->|Parallel| E3[Try Gemini]
 ```
 
+---
 
 ### Iterative Processing
 
-Use the `For` handler to iterate over handlers N-times or infinately. Provide a conditional function to break early.
+Use the `For` handler to iterate over handlers N times or infinitely.
 
 ```go
 llm, _ := openai.NewProvider()
-const iterations = 3
-process := handlers.For("process", iterations, 
+process := handlers.For("process", 3, 
     handlers.Summarize(llm, "Be concise"),
     llm,
 )
@@ -239,89 +346,57 @@ H1 --> H2[LLM]
 H2 --> C
 ```
 
+---
+
 ### Conditional Processing
 
-Use the `Switch` handler to route messages based on conditions. This example shows how to handle different types of user requests using metadata and LLM-based routing:
+Use the `Switch` handler to route messages based on conditions.
 
 ```go
-func main() {
-    llm, _ := openai.NewProvider()
-    
-    // Create specialized handlers for different tasks
-    calculator := tools.NewCalculator()
-    questionHandler := handlers.NewQuestionHandler(llm)
-    summaryHandler := handlers.NewSummaryHandler(llm)
-    
-    // Define conditions and their handlers
-    intentSwitch := handlers.Switch("intent-router",
-        handlers.NewDefaultHandler(llm), // fallback handler
-        handlers.SwitchCase{
-            // Use LLM to check if message is a math question
-            Condition: handlers.LLMCondition{
-                Generator: llm,
-                Prompt:   "Does this message contain a mathematical calculation?",
-            },
-            Handler: calculator,
+intentSwitch := handlers.Switch("intent-router",
+    handlers.NewDefaultHandler(llm), // fallback
+    handlers.SwitchCase{
+        Condition: handlers.LLMCondition{
+            Generator: llm,
+            Prompt:   "Does this message contain a mathematical calculation?",
         },
-        handlers.SwitchCase{
-            // Check metadata for specific routing
-            Condition: handlers.MetadataEquals{
-                Key:   "type",
-                Value: "question",
-            },
-            Handler: questionHandler,
+        Handler: calculator,
+    },
+    handlers.SwitchCase{
+        Condition: handlers.MetadataEquals{
+            Key:   "type",
+            Value: "question",
         },
-        handlers.SwitchCase{
-            // Use Lua for complex condition
-            Condition: extensions.LuaCondition{
-                Script: `
-                    -- Check if message is long and needs summarization
-                    return string.len(last_message) > 500
-                `,
-            },
-            Handler: summaryHandler,
-        },
-    )
-
-    // Initial thread with metadata
-    thread := minds.NewThreadContext(context.Background()).
-        WithMessages(minds.Messages{
-            {Role: minds.RoleUser, Content: "What is 7 * 12 + 5?"},
-        }).
-        WithMetadata(map[string]interface{}{
-            "type": "calculation",
-        })
-
-    // Process the thread
-    result, err := intentSwitch.HandleThread(thread, nil)
-    if err != nil {
-        log.Fatalf("Error processing thread: %v", err)
-    }
-    
-    fmt.Println("Response:", result.Messages().Last().Content)
-}
+        Handler: questionHandler,
+    },
+)
 ```
 
+---
 
 ### Batch Processing
 
-Execute a handler for every value in a slice of values. Each valud is placed in metadata for access.
+Execute a handler for every value in a slice.
 
-```go 
+```go
 values := []string{"value1", "value2", "value3"}
 process := handlers.Range("batch", processor, values)
 ```
 
+---
 
 ## Contributing
 
-Contributions are welcome! Please see the [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+---
 
 ## License
 
-This project is licensed under the Apache 2.0 License. See the [LICENSE](LICENSE) file for details.
+This project is licensed under the Apache 2.0 License. See [LICENSE](LICENSE) for details.
+
+---
 
 ## Acknowledgements
 
-This project is inspired by the `http.Handler` middleware pattern and the need for modular and extensible LLM application development in Go.
-
+Inspired by the `http.Handler` middleware pattern and the need for modular, extensible LLM application development in Go.

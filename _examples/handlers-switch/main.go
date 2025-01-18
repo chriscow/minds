@@ -17,7 +17,10 @@ func main() {
 
 	// Create specialized handlers for different tasks
 	calc, _ := calculator.NewCalculator(calculator.Lua)
-	calcHandler := calc.(minds.ThreadHandler)
+	toolCaller, err := openai.NewProvider(openai.WithTool(calc))
+	if err != nil {
+		log.Fatalf("Error creating tool caller: %v", err)
+	}
 
 	questionHandler := llm // let the llm answer questions
 	summaryHandler := handlers.Summarize(llm, "")
@@ -32,7 +35,7 @@ func main() {
 				Generator: llm,
 				Prompt:    "Does this message contain a mathematical calculation?",
 			},
-			Handler: calcHandler,
+			Handler: toolCaller,
 		},
 		handlers.SwitchCase{
 			// Check metadata for specific routing
