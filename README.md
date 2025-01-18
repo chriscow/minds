@@ -87,9 +87,9 @@ func main() {
 		printJoke,
 	)
 
-    flow := handlers.ThreadFlow("joke_competition")
+    	flow := handlers.ThreadFlow("joke_competition")
 	flow.Use(limiter)
-    flow.Handle(jokeExchange)
+    	flow.Handle(jokeExchange)
 
 	// Initial prompt
 	prompt := "Tell me a clean, family-friendly joke. Keep it clean and make me laugh!"
