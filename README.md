@@ -79,14 +79,17 @@ func main() {
 		return tc, nil
 	})
 
-	// Create a cycle alternating between Gemini and OpenAI
+	// Create a "For" loop alternating between Gemini and OpenAI
 	jokeExchange := handlers.For("joke_exchange", 5,
 		geminiJoker,
 		printJoke,
 		openAIJoker,
 		printJoke,
 	)
-	jokeExchange.Use(limiter)
+
+    flow := handlers.ThreadFlow("joke_competition")
+	flow.Use(limiter)
+    flow.Handle(jokeExchange)
 
 	// Initial prompt
 	prompt := "Tell me a clean, family-friendly joke. Keep it clean and make me laugh!"
@@ -95,7 +98,7 @@ func main() {
 	})
 
 	// Run the joke exchange
-	if _, err := jokeExchange.HandleThread(initialThread, nil); err != nil {
+	if _, err := flow.HandleThread(initialThread, nil); err != nil {
 		log.Fatalf("Error in joke exchange: %v", err)
 	}
 }
