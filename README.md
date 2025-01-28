@@ -156,16 +156,16 @@ H --> I[Next Handler]
 
 ```go
 func main() {
-	flow := NewThreadFlow("conversation")
-	flow.Use(NewLogging("audit")) // Global middleware
+	flow := handlers.NewThreadFlow("conversation")
+	flow.Use(Logging("audit")) // Global middleware
 
 	// Base handler for input validation
 	flow.Handle(validateInput)
 
 	// Group with specific middleware
 	flow.Group(func(f *ThreadFlow) {
-		f.Use(NewRetry("retry", 3))    // Retry up to 3 times
-		f.Use(NewTimeout("timeout", 5)) // Timeout after 5 seconds
+		f.Use(Retry("retry", 3))    // Retry up to 3 times
+		f.Use(Timeout("timeout", 5)) // Timeout after 5 seconds
 		f.Handle(generateResponse)      // Handler for LLM response
 		f.Handle(validateOutput)        // Handler for output validation
 	})
@@ -190,13 +190,13 @@ func main() {
 
 1. **Global Middleware**: Middleware added with `Use()` applies to all handlers in the flow.
    ```go
-   flow.Use(NewLogging("audit"))
+   flow.Use(Logging("audit"))
    ```
 
 2. **Grouped Middleware**: Middleware added within a `Group()` applies only to handlers in that group.
    ```go
    flow.Group(func(f *ThreadFlow) {
-       f.Use(NewRetry("retry", 3))
+       f.Use(middleware.Retry("retry", 3))
        f.Handle(generateResponse)
    })
    ```
@@ -221,11 +221,11 @@ func main() {
 ThreadFlow can be combined with other handlers like `First`, `Must`, and `For` to build even more powerful pipelines. For example:
 
 ```go
-flow := NewThreadFlow("complex-pipeline")
-flow.Use(NewLogging("audit"))
+flow := handlers.NewThreadFlow("complex-pipeline")
+flow.Use(middleware.Retry("retry"), 3)
 
-flow.Group(func(f *ThreadFlow) {
-    f.Use(NewTimeout("timeout", 10))
+flow.Group(func(f *handlers.ThreadFlow) {
+    f.Use(middleware.Timeout("timeout", 10))
     f.Handle(handlers.First("fallback",
         generateResponseWithGPT4,
         generateResponseWithGemini,
@@ -275,9 +275,9 @@ All handlers execute in parallel and must succeed; otherwise, an error is return
 
 ```go
 validate := handlers.Must("validation",
-    handlers.NewFormatValidator(),
-    handlers.NewLengthValidator(1000),
-    handlers.NewContentScanner(),
+    NewFormatValidator(),     // your own handler implementations
+    NewLengthValidator(1000), // ...
+    NewContentScanner(),      // ...
 )
 ```
 
