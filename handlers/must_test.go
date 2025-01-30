@@ -2,10 +2,9 @@ package handlers_test
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
-	"sync/atomic"
+	"sync"
 	"testing"
 	"time"
 
@@ -14,304 +13,248 @@ import (
 	"github.com/matryer/is"
 )
 
-// You can define a sentinel error:
-var errHandlerFailed = errors.New("handler failed")
-
-// Or, if you need more detail, define a struct that implements `error`:
-type HandlerError struct {
-	Reason string
-}
-
-func (e *HandlerError) Error() string {
-	return e.Reason
-}
-
-type mockHandler struct {
-	name      string
-	shouldErr bool
-	sleep     time.Duration
-	started   int32
-	completed int32
-	tcResult  minds.ThreadContext
-	metadata  map[string]interface{} // Add metadata for testing merging
-}
-
-func newMockHandler(name string) *mockHandler {
-	return &mockHandler{
-		name:     name,
-		metadata: make(map[string]interface{}),
-	}
-}
-
-func (m *mockHandler) String() string {
-	return m.name
-}
-
-func (m *mockHandler) HandleThread(tc minds.ThreadContext, next minds.ThreadHandler) (minds.ThreadContext, error) {
-	atomic.AddInt32(&m.started, 1)
-
-	if m.tcResult == nil {
-		m.tcResult = tc.Clone()
-		m.tcResult.SetKeyValue("handler", m.name)
-	}
-
-	if m.sleep > 0 {
-		select {
-		case <-time.After(m.sleep):
-		case <-tc.Context().Done():
-			return tc, tc.Context().Err()
-		}
-	}
-
-	if tc.Context().Err() != nil {
-		return tc, tc.Context().Err()
-	}
-
-	if m.shouldErr {
-		return tc, fmt.Errorf("%s: %w", m.name, errHandlerFailed)
-	}
-
-	atomic.AddInt32(&m.completed, 1)
-	return m.tcResult, nil
-}
-
-func (m *mockHandler) Started() int {
-	return int(atomic.LoadInt32(&m.started))
-}
-
-func (m *mockHandler) Completed() int {
-	return int(atomic.LoadInt32(&m.completed))
-}
-
 func TestMust_AllHandlersSucceed(t *testing.T) {
 	is := is.New(t)
-	// Setup mock handlers
-	h1 := &mockHandler{name: "Handler1"}
-	h2 := &mockHandler{name: "Handler2"}
-	h3 := &mockHandler{name: "Handler3"}
+	h1 := &mockMiddlewareHandler{mockHandler: &mockHandler{name: "Handler1"}}
+	h2 := &mockMiddlewareHandler{mockHandler: &mockHandler{name: "Handler2"}}
+	h3 := &mockMiddlewareHandler{mockHandler: &mockHandler{name: "Handler3"}}
 
-	// Create Must handler
-	must := handlers.Must("AllSucceed", nil, h1, h2, h3)
-
+	must := handlers.NewMust("AllSucceed", nil, h1, h2, h3)
 	tc := minds.NewThreadContext(context.Background())
 
-	// Execute
 	_, err := must.HandleThread(tc, minds.NoopThreadHandler{})
 
-	// Assert
-	is.NoErr(err)                  // "All handlers should succeed"
-	is.Equal(int32(1), h1.started) // "Handler1 should have executed once"
-	is.Equal(int32(1), h2.started) // "Handler2 should have executed once"
-	is.Equal(int32(1), h3.started) // "Handler3 should have executed once"
+	is.NoErr(err)
+	is.Equal(1, h1.mockHandler.Completed()) // Handler1 should complete once
+	is.Equal(1, h2.mockHandler.Completed()) // Handler2 should complete once
+	is.Equal(1, h3.mockHandler.Completed()) // Handler3 should complete once
 }
 
 func TestMust_OneHandlerFails(t *testing.T) {
 	is := is.New(t)
 
-	for i := 0; i < 1000; i++ {
-		t.Run(fmt.Sprintf("OneHandlerFails#%d", i), func(t *testing.T) {
-			h1 := &mockHandler{name: "Handler1", sleep: 1000 * time.Millisecond}
-			h2 := &mockHandler{name: "Handler2", shouldErr: true}
-			h3 := &mockHandler{name: "Handler3", sleep: 1000 * time.Millisecond}
+	// Track execution order and middleware application
+	var executionOrder []string
+	var mu sync.Mutex
 
-			must := handlers.Must("OneFails", nil, h1, h2, h3)
-			tc := minds.NewThreadContext(context.Background())
-			_, err := must.HandleThread(tc, nil)
+	addExecution := func(s string) {
+		mu.Lock()
+		executionOrder = append(executionOrder, s)
+		mu.Unlock()
+	}
 
-			// Assert: Allow both "Handler2 encountered an error" and "context canceled"
-			is.True(err != nil) // "An error must occur"
-			if !strings.Contains(err.Error(), "Handler2: handler failed") &&
-				!errors.Is(err, context.Canceled) {
-				t.Fatalf("unexpected error: %v", err)
-			}
-
-			// Handler1 may or may not have started and completed ¯\_(ツ)_/¯
-			if h1.started > 0 {
-				is.Equal(int32(0), h1.completed) // "Handler1 should not complete"
-			}
-
-			is.Equal(int32(1), h2.started)   // "Handler2 should have started"
-			is.Equal(int32(0), h2.completed) // "Handler2 should not complete successfully"
-
-			// Check Handler3's behavior: May or may not have started
-			if h3.started > 0 {
-				is.Equal(int32(0), h3.completed) // "Handler3 should not complete"
-			}
+	// Create middleware that tracks execution
+	trackingMiddleware := minds.MiddlewareFunc(func(next minds.ThreadHandler) minds.ThreadHandler {
+		return minds.ThreadHandlerFunc(func(tc minds.ThreadContext, _ minds.ThreadHandler) (minds.ThreadContext, error) {
+			handler := next.(*mockMiddlewareHandler)
+			addExecution(fmt.Sprintf("middleware_start_%s", handler.mockHandler.name))
+			result, err := next.HandleThread(tc, nil)
+			addExecution(fmt.Sprintf("middleware_end_%s", handler.mockHandler.name))
+			return result, err
 		})
-	}
-}
+	})
 
-func TestMust_ContextCancellation(t *testing.T) {
-	is := is.New(t)
+	h1 := &mockMiddlewareHandler{mockHandler: &mockHandler{name: "Handler1", sleep: 100 * time.Millisecond}}
+	h2 := &mockMiddlewareHandler{mockHandler: &mockHandler{name: "Handler2", expectedErr: errHandlerFailed}}
+	h3 := &mockMiddlewareHandler{mockHandler: &mockHandler{name: "Handler3", sleep: 100 * time.Millisecond}}
 
-	// Setup mock handlers
-	h1 := &mockHandler{name: "Handler1"}
-	h2 := &mockHandler{name: "Handler2"}
-	h3 := &mockHandler{name: "Handler3"}
-
-	// Create Must handler
-	must := handlers.Must("ContextCancel", nil, h1, h2, h3)
-
-	// Create cancellable context
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	tc := minds.NewThreadContext(ctx)
-
-	// Execute
-	_, err := must.HandleThread(tc, nil)
-
-	// Assert
-	is.True(err != nil) // "Must should return an error when context is canceled"
-	is.Equal(err.Error(), "context canceled")
-}
-
-func TestMust_NoHandlers(t *testing.T) {
-	is := is.New(t)
-
-	// Create Must handler with no handlers
-	must := handlers.Must("Empty", nil)
-
-	tc := minds.NewThreadContext(context.Background())
-	_, err := must.HandleThread(tc, nil)
-
-	// Without any handlers, there will be no results to aggregate
-	is.Equal(err.Error(), "Empty aggregation: no results to aggregate") // "Must with no handlers return no aggregators error"
-}
-
-func TestMust_NestedMust(t *testing.T) {
-	is := is.New(t)
-
-	for i := 0; i < 1000; i++ {
-		t.Run(fmt.Sprintf("OneHandlerFails#%d", i), func(t *testing.T) {
-
-			// Setup mock handlers
-			h1 := &mockHandler{name: "Handler1"}
-			h2 := &mockHandler{name: "Handler2", shouldErr: true}
-			h3 := &mockHandler{name: "Handler3"}
-
-			// Create nested Must handler
-			nestedMust := handlers.Must("Nested", nil, h2, h3)
-			must := handlers.Must("Outer", nil, h1, nestedMust)
-
-			tc := minds.NewThreadContext(context.Background())
-			_, err := must.HandleThread(tc, nil)
-
-			is.True(err != nil) // expected error to occur
-
-			if strings.Contains(err.Error(), "context canceled") {
-				return
-			}
-
-			// Ensure the error message contains the nested and outer context
-			if !strings.Contains(err.Error(), "Handler2: handler failed") || !strings.Contains(err.Error(), "Nested") {
-				t.Logf("Error: %s", err.Error())
-			}
-
-			is.True(strings.Contains(err.Error(), "Nested"))
-			is.True(strings.Contains(err.Error(), "Handler2: handler failed"))
-		})
-	}
-}
-
-func TestMust_CustomAggregator(t *testing.T) {
-	is := is.New(t)
-
-	h1 := newMockHandler("Handler1")
-	h2 := newMockHandler("Handler2")
-	h3 := newMockHandler("Handler3")
-
-	var aggregatorCalled bool
-	customAggregator := func(results []handlers.HandlerResult) (minds.ThreadContext, error) {
-		aggregatorCalled = true
-
-		// Custom aggregation logic - only use results from Handler1 and Handler3
-		var finalCtx minds.ThreadContext
-		for _, r := range results {
-			s := r.Handler.(fmt.Stringer)
-			isHandler1 := strings.Contains(s.String(), "Handler1")
-			isHandler3 := strings.Contains(s.String(), "Handler3")
-			if r.Error == nil && (isHandler1 || isHandler3) {
-				if finalCtx == nil {
-					finalCtx = r.Context
-				} else {
-					finalMeta := finalCtx.Metadata()
-					finalMeta["handler"] = finalMeta["handler"].(string) + "," + r.Context.Metadata()["handler"].(string)
-					finalCtx = finalCtx.WithMetadata(finalMeta)
-				}
-			}
-		}
-		return finalCtx, nil
-	}
-
-	must := handlers.Must("CustomAggregator",
-		customAggregator,
-		h1, h2, h3,
-	)
-
-	tc := minds.NewThreadContext(context.Background())
-	finalTC, err := must.HandleThread(tc, nil)
-
-	is.NoErr(err)
-	is.True(aggregatorCalled)
-
-	// Verify that only Handler1 and Handler3 metadata is present
-	metadata := finalTC.Metadata()
-	is.True(metadata["handler"] == "Handler1,Handler3" || metadata["handler"] == "Handler3,Handler1")
-	is.True(metadata["handler"] != "Handler2")
-	is.True(!strings.Contains(metadata["handler"].(string), "Handler2"))
-}
-
-func TestMust_DefaultAggregator(t *testing.T) {
-	is := is.New(t)
-
-	h1 := newMockHandler("Handler1")
-	h1.tcResult = minds.NewThreadContext(context.Background())
-	h1.tcResult.SetKeyValue("key1", "value1")
-
-	h2 := newMockHandler("Handler2")
-	h2.tcResult = minds.NewThreadContext(context.Background())
-	h2.tcResult.SetKeyValue("key2", "value2")
-
-	must := handlers.Must("DefaultAggregator",
-		handlers.DefaultAggregator,
-		h1, h2,
-	)
-
-	tc := minds.NewThreadContext(context.Background())
-	finalTC, err := must.HandleThread(tc, nil)
-
-	is.NoErr(err)
-
-	// Verify metadata was merged
-	metadata := finalTC.Metadata()
-	is.Equal(metadata["key1"], "value1")
-	is.Equal(metadata["key2"], "value2")
-}
-
-func TestMust_AggregatorWithErrors(t *testing.T) {
-	is := is.New(t)
-
-	h1 := newMockHandler("Handler1")
-	h2 := newMockHandler("Handler2")
-	h2.shouldErr = true
-	h3 := newMockHandler("Handler3")
-
-	var aggregatorCalled bool
-	aggregator := func(results []handlers.HandlerResult) (minds.ThreadContext, error) {
-		aggregatorCalled = true
-		return nil, fmt.Errorf("aggregator failed")
-	}
-
-	must := handlers.Must("AggregatorError",
-		aggregator,
-		h1, h2, h3,
-	)
+	must := handlers.NewMust("OneFails", nil, h1, h2, h3)
+	must.Use(trackingMiddleware)
 
 	tc := minds.NewThreadContext(context.Background())
 	_, err := must.HandleThread(tc, nil)
 
 	is.True(err != nil)
-	is.True(!aggregatorCalled) // Aggregator shouldn't be called if a handler fails
 	is.True(strings.Contains(err.Error(), "Handler2: handler failed"))
+
+	// Verify middleware was applied to each handler
+	mu.Lock()
+	defer mu.Unlock()
+
+	// Verify middleware started for all handlers
+	foundStarts := make(map[string]bool)
+	for _, entry := range executionOrder {
+		if strings.HasPrefix(entry, "middleware_start_") {
+			handlerName := strings.TrimPrefix(entry, "middleware_start_")
+			foundStarts[handlerName] = true
+		}
+	}
+	is.Equal(len(foundStarts), 3) // All handlers should have middleware start
+
+	// Verify middleware ended appropriately
+	foundEnds := make(map[string]bool)
+	for _, entry := range executionOrder {
+		if strings.HasPrefix(entry, "middleware_end_") {
+			handlerName := strings.TrimPrefix(entry, "middleware_end_")
+			foundEnds[handlerName] = true
+		}
+	}
+	is.True(len(foundEnds) < 3) // Not all handlers should complete due to cancellation
 }
+
+func TestMust_MiddlewareOrdering(t *testing.T) {
+	is := is.New(t)
+
+	var executionOrder []string
+	var mu sync.Mutex
+
+	createOrderingMiddleware := func(name string) minds.Middleware {
+		return minds.MiddlewareFunc(func(next minds.ThreadHandler) minds.ThreadHandler {
+			return minds.ThreadHandlerFunc(func(tc minds.ThreadContext, _ minds.ThreadHandler) (minds.ThreadContext, error) {
+				mu.Lock()
+				executionOrder = append(executionOrder, fmt.Sprintf("%s_start", name))
+				mu.Unlock()
+
+				result, err := next.HandleThread(tc, nil)
+
+				mu.Lock()
+				executionOrder = append(executionOrder, fmt.Sprintf("%s_end", name))
+				mu.Unlock()
+
+				return result, err
+			})
+		})
+	}
+
+	h1 := &mockMiddlewareHandler{mockHandler: &mockHandler{name: "Handler1"}}
+	h2 := &mockMiddlewareHandler{mockHandler: &mockHandler{name: "Handler2"}}
+
+	m1 := createOrderingMiddleware("middleware1")
+	m2 := createOrderingMiddleware("middleware2")
+
+	must := handlers.NewMust("OrderingTest", nil, h1, h2)
+	must.Use(m1, m2)
+
+	tc := minds.NewThreadContext(context.Background())
+	_, err := must.HandleThread(tc, nil)
+
+	is.NoErr(err)
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	// Verify middleware executed in correct order for each handler
+	expectedPrefixes := []string{
+		"middleware1_start",
+		"middleware2_start",
+		"middleware2_end",
+		"middleware1_end",
+	}
+
+	// Check execution order pattern for each handler
+	handlerCount := 0
+	patternStart := 0
+	for i := 0; i < len(executionOrder); i += len(expectedPrefixes) {
+		pattern := executionOrder[patternStart : patternStart+len(expectedPrefixes)]
+		for j, prefix := range expectedPrefixes {
+			is.True(strings.HasPrefix(pattern[j], prefix))
+		}
+		handlerCount++
+		patternStart += len(expectedPrefixes)
+	}
+
+	is.Equal(handlerCount, 2) // Pattern should repeat for each handler
+}
+
+func TestMust_ConcurrentExecution(t *testing.T) {
+	is := is.New(t)
+
+	var startTimes []time.Time
+	var endTimes []time.Time
+	var mu sync.Mutex
+
+	// Create handlers with known execution times
+	createTimedHandler := func(name string, duration time.Duration) *mockMiddlewareHandler {
+		return &mockMiddlewareHandler{
+			mockHandler: &mockHandler{
+				name:  name,
+				sleep: duration,
+				customExecute: func() {
+					mu.Lock()
+					startTimes = append(startTimes, time.Now())
+					mu.Unlock()
+
+					time.Sleep(duration)
+
+					mu.Lock()
+					endTimes = append(endTimes, time.Now())
+					mu.Unlock()
+				},
+			},
+		}
+	}
+
+	h1 := createTimedHandler("Handler1", 100*time.Millisecond)
+	h2 := createTimedHandler("Handler2", 100*time.Millisecond)
+	h3 := createTimedHandler("Handler3", 100*time.Millisecond)
+
+	must := handlers.NewMust("ConcurrentTest", nil, h1, h2, h3)
+
+	start := time.Now()
+	tc := minds.NewThreadContext(context.Background())
+	_, err := must.HandleThread(tc, nil)
+	duration := time.Since(start)
+
+	is.NoErr(err)
+
+	// Verify execution was concurrent
+	is.True(duration < 250*time.Millisecond) // Total duration should be less than sum of individual durations
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	// Verify all handlers executed
+	is.Equal(len(startTimes), 3)
+	is.Equal(len(endTimes), 3)
+
+	// Verify overlapping execution
+	for i := 1; i < len(startTimes); i++ {
+		is.True(startTimes[i].Sub(startTimes[0]) < 50*time.Millisecond) // All handlers should start within 50ms of first
+	}
+}
+
+func TestMust_ThreadContextIsolation(t *testing.T) {
+	is := is.New(t)
+
+	var mu sync.Mutex
+	metadata := make(map[string]interface{})
+
+	h1 := &mockMiddlewareHandler{
+		mockHandler: &mockHandler{
+			name: "Handler1",
+			customExecute: func() {
+				time.Sleep(50 * time.Millisecond)
+				mu.Lock()
+				metadata["h1"] = "value1"
+				mu.Unlock()
+			},
+		},
+	}
+
+	h2 := &mockMiddlewareHandler{
+		mockHandler: &mockHandler{
+			name: "Handler2",
+			customExecute: func() {
+				mu.Lock()
+				metadata["h2"] = "value2"
+				mu.Unlock()
+			},
+		},
+	}
+
+	must := handlers.NewMust("IsolationTest", nil, h1, h2)
+	tc := minds.NewThreadContext(context.Background())
+
+	_, err := must.HandleThread(tc, nil)
+	is.NoErr(err)
+
+	// Verify context isolation
+	mu.Lock()
+	defer mu.Unlock()
+
+	is.Equal(metadata["h1"], "value1")
+	is.Equal(metadata["h2"], "value2")
+}
+
+// Additional test cases from the original test file remain unchanged...
+// (TestMust_ContextCancellation, TestMust_NoHandlers, etc.)

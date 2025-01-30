@@ -27,7 +27,11 @@ type functionWrapper struct {
 }
 
 // WrapFunction takes a `CallableFunc` and wraps it as a `minds.Tool` with the provided name and description.
-func WrapFunction(name, description string, args interface{}, fn CallableFunc) (*functionWrapper, error) {
+func WrapFunction(name, description string, args any, fn CallableFunc) (*functionWrapper, error) {
+	if args == nil {
+		return nil, fmt.Errorf("args must be a non-nil pointer to a struct")
+	}
+
 	// Validate that fn is actually a function
 	fnType := reflect.TypeOf(args)
 

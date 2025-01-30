@@ -11,13 +11,13 @@ import (
 	"github.com/matryer/is"
 )
 
-type mockResponse struct {
+type mockPolicyResponse struct {
 	Valid     bool   `json:"valid"`
 	Reason    string `json:"reason"`
 	Violation string `json:"violation"`
 }
 
-func (m *mockResponse) String() string {
+func (m *mockPolicyResponse) String() string {
 	b, err := json.Marshal(m)
 	if err != nil {
 		return "failed to marshal mock response"
@@ -25,11 +25,11 @@ func (m *mockResponse) String() string {
 	return string(b)
 }
 
-func (m *mockResponse) ToolCalls() []minds.ToolCall {
+func (m *mockPolicyResponse) ToolCalls() []minds.ToolCall {
 	return []minds.ToolCall{}
 }
 
-// func (m *mockResponse) Messages() (minds.Messages, error) {
+// func (m *mockPolicyResponse) Messages() (minds.Messages, error) {
 // 	return minds.Messages{
 // 		{
 // 			Role:    minds.RoleAssistant,
@@ -39,8 +39,8 @@ func (m *mockResponse) ToolCalls() []minds.ToolCall {
 // }
 
 type mockContentGenerator struct {
-	mockResponse mockResponse
-	mockError    error
+	mockPolicyResponse mockPolicyResponse
+	mockError          error
 }
 
 func (m *mockContentGenerator) ModelName() string {
@@ -52,7 +52,7 @@ func (m *mockContentGenerator) GenerateContent(ctx context.Context, req minds.Re
 		return nil, m.mockError
 	}
 
-	return &m.mockResponse, nil
+	return &m.mockPolicyResponse, nil
 }
 
 func (m *mockContentGenerator) Close() {}
@@ -72,7 +72,7 @@ func TestPolicy_ContextCanceled(t *testing.T) {
 
 	mockLLM := &mockContentGenerator{}
 
-	validator := handlers.Policy(mockLLM, "TestPolicy", "Validate the following content.", nil)
+	validator := handlers.NewPolicy(mockLLM, "TestPolicy", "Validate the following content.", nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -90,7 +90,7 @@ func TestPolicy_String(t *testing.T) {
 
 	mockLLM := &mockContentGenerator{}
 
-	validator := handlers.Policy(mockLLM, "TestPolicy", "Validate the following content.", nil)
+	validator := handlers.NewPolicy(mockLLM, "TestPolicy", "Validate the following content.", nil)
 
 	is.Equal(validator.String(), "Policy(TestPolicy)")
 }
@@ -99,7 +99,7 @@ func TestPolicy_HandleThread_Success(t *testing.T) {
 	is := is.New(t)
 
 	mockLLM := &mockContentGenerator{
-		mockResponse: mockResponse{
+		mockPolicyResponse: mockPolicyResponse{
 			Valid:     true,
 			Reason:    "Content is valid.",
 			Violation: "",
@@ -108,7 +108,7 @@ func TestPolicy_HandleThread_Success(t *testing.T) {
 
 	rf := &mockResultFn{}
 
-	validator := handlers.Policy(mockLLM, "TestPolicy", "Validate the following content.", rf.handleResult)
+	validator := handlers.NewPolicy(mockLLM, "TestPolicy", "Validate the following content.", rf.handleResult)
 
 	ctx := context.Background()
 	msgIn := minds.Message{Role: minds.RoleUser, Content: "Test message."}
@@ -131,7 +131,7 @@ func TestPolicy_HandleThread_InvalidResponse(t *testing.T) {
 	is := is.New(t)
 
 	mockLLM := &mockContentGenerator{
-		mockResponse: mockResponse{
+		mockPolicyResponse: mockPolicyResponse{
 			Valid:     false,
 			Reason:    "Content is invalid.",
 			Violation: "Test violation.",
@@ -139,7 +139,7 @@ func TestPolicy_HandleThread_InvalidResponse(t *testing.T) {
 	}
 
 	t.Run("NoResultFn", func(t *testing.T) {
-		validator := handlers.Policy(mockLLM, "TestPolicy", "Validate the following content.", nil)
+		validator := handlers.NewPolicy(mockLLM, "TestPolicy", "Validate the following content.", nil)
 
 		msgIn := minds.Message{Role: minds.RoleUser, Content: "Test message."}
 
@@ -156,7 +156,7 @@ func TestPolicy_HandleThread_InvalidResponse(t *testing.T) {
 			err: errors.New("Content is invalid."),
 		}
 
-		validator := handlers.Policy(mockLLM, "TestPolicy", "Validate the following content.", fn.handleResult)
+		validator := handlers.NewPolicy(mockLLM, "TestPolicy", "Validate the following content.", fn.handleResult)
 
 		msgIn := minds.Message{Role: minds.RoleUser, Content: "Test message."}
 
@@ -175,7 +175,7 @@ func TestPolicy_HandleThread_GenerationError(t *testing.T) {
 		mockError: errors.New("generation failed"),
 	}
 
-	validator := handlers.Policy(mockLLM, "TestPolicy", "Validate the following content.", nil)
+	validator := handlers.NewPolicy(mockLLM, "TestPolicy", "Validate the following content.", nil)
 
 	msgIn := minds.Message{Role: minds.RoleUser, Content: "Test message."}
 
@@ -190,14 +190,14 @@ func TestPolicy_HandleThread_Failure_NoResultFn(t *testing.T) {
 	is := is.New(t)
 
 	mockLLM := &mockContentGenerator{
-		mockResponse: mockResponse{
+		mockPolicyResponse: mockPolicyResponse{
 			Valid:     false,
 			Reason:    "Content is invalid.",
 			Violation: "Test violation.",
 		},
 	}
 
-	validator := handlers.Policy(mockLLM, "TestPolicy", "Validate the following content.", nil)
+	validator := handlers.NewPolicy(mockLLM, "TestPolicy", "Validate the following content.", nil)
 
 	msgIn := minds.Message{Role: minds.RoleUser, Content: "Test message."}
 

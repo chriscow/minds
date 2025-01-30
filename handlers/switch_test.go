@@ -1,75 +1,13 @@
-package handlers
+package handlers_test
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 
 	"github.com/chriscow/minds"
+	"github.com/chriscow/minds/handlers"
 	"github.com/matryer/is"
 )
-
-type mockProvider struct {
-	response minds.Response
-}
-
-func (m *mockProvider) ModelName() string {
-	return "mock-model"
-}
-
-func (m *mockProvider) GenerateContent(ctx context.Context, req minds.Request) (minds.Response, error) {
-	return m.response, nil
-}
-
-func (m *mockProvider) Close() {
-	// No-op
-}
-
-type mockHandler struct {
-	name     string
-	called   bool
-	response minds.ThreadContext
-	err      error
-}
-
-func (m *mockHandler) HandleThread(tc minds.ThreadContext, next minds.ThreadHandler) (minds.ThreadContext, error) {
-	m.called = true
-	if m.response != nil {
-		return m.response, m.err
-	}
-	return tc, m.err
-}
-
-func (m *mockHandler) String() string {
-	return m.name
-}
-
-type mockResponse struct {
-	Content string
-}
-
-func (m mockResponse) String() string {
-	return m.Content
-}
-
-func (m mockResponse) ToolCalls() []minds.ToolCall {
-	return nil
-}
-
-func newMockTextResponse(content string) minds.Response {
-	return mockResponse{
-		Content: content,
-	}
-}
-
-func newMockBoolResponse(content bool) minds.Response {
-	resp := boolResp{Bool: content}
-	data, _ := json.Marshal(resp)
-
-	return mockResponse{
-		Content: string(data),
-	}
-}
 
 func TestSwitch(t *testing.T) {
 	is := is.New(t)
@@ -84,23 +22,23 @@ func TestSwitch(t *testing.T) {
 		tc := minds.NewThreadContext(context.Background()).
 			WithMetadata(minds.Metadata{"type": "text"})
 
-		sw := Switch("test",
+		sw := handlers.NewSwitch("test",
 			defaultHandler,
-			SwitchCase{
-				Condition: MetadataEquals{Key: "type", Value: "text"},
+			handlers.SwitchCase{
+				Condition: handlers.MetadataEquals{Key: "type", Value: "text"},
 				Handler:   handler1,
 			},
-			SwitchCase{
-				Condition: MetadataEquals{Key: "type", Value: "image"},
+			handlers.SwitchCase{
+				Condition: handlers.MetadataEquals{Key: "type", Value: "image"},
 				Handler:   handler2,
 			},
 		)
 
 		_, err := sw.HandleThread(tc, nil)
 		is.NoErr(err)
-		is.True(handler1.called)        // First handler should be called
-		is.True(!handler2.called)       // Second handler should not be called
-		is.True(!defaultHandler.called) // Default handler should not be called
+		is.True(1 == handler1.Completed())     // First handler should be called
+		is.True(0 == handler2.Started())       // Second handler should not be called
+		is.True(0 == defaultHandler.Started()) // Default handler should not be called
 	})
 
 	t.Run("falls through to default", func(t *testing.T) {
@@ -112,28 +50,28 @@ func TestSwitch(t *testing.T) {
 		tc := minds.NewThreadContext(context.Background()).
 			WithMetadata(minds.Metadata{"type": "unknown"})
 
-		sw := Switch("test",
+		sw := handlers.NewSwitch("test",
 			defaultHandler,
-			SwitchCase{
-				Condition: MetadataEquals{Key: "type", Value: "text"},
+			handlers.SwitchCase{
+				Condition: handlers.MetadataEquals{Key: "type", Value: "text"},
 				Handler:   handler1,
 			},
 		)
 
 		_, err := sw.HandleThread(tc, nil)
 		is.NoErr(err)
-		is.True(!handler1.called)      // Handler should not be called
-		is.True(defaultHandler.called) // Default handler should be called
+		is.True(0 == handler1.Started())         // Handler should not be called
+		is.True(1 == defaultHandler.Completed()) // Default handler should be called
 	})
 }
 
-func TestMetadataEquals(t *testing.T) {
+func Testhandlers_MetadataEquals(t *testing.T) {
 	is := is.New(t)
 
 	t.Run("matches existing key and value", func(t *testing.T) {
 		is := is.New(t)
 
-		cond := MetadataEquals{Key: "type", Value: "text"}
+		cond := handlers.MetadataEquals{Key: "type", Value: "text"}
 		tc := minds.NewThreadContext(context.Background()).
 			WithMetadata(minds.Metadata{"type": "text"})
 
@@ -145,7 +83,7 @@ func TestMetadataEquals(t *testing.T) {
 	t.Run("non-matching value", func(t *testing.T) {
 		is := is.New(t)
 
-		cond := MetadataEquals{Key: "type", Value: "text"}
+		cond := handlers.MetadataEquals{Key: "type", Value: "text"}
 		tc := minds.NewThreadContext(context.Background()).
 			WithMetadata(minds.Metadata{"type": "image"})
 
@@ -157,7 +95,7 @@ func TestMetadataEquals(t *testing.T) {
 	t.Run("non-existing key", func(t *testing.T) {
 		is := is.New(t)
 
-		cond := MetadataEquals{Key: "missing", Value: "text"}
+		cond := handlers.MetadataEquals{Key: "missing", Value: "text"}
 		tc := minds.NewThreadContext(context.Background()).
 			WithMetadata(minds.Metadata{"type": "text"})
 
@@ -177,7 +115,7 @@ func TestLLMCondition(t *testing.T) {
 			response: newMockBoolResponse(true),
 		}
 
-		cond := LLMCondition{
+		cond := handlers.LLMCondition{
 			Generator: provider,
 			Prompt:    "Is this positive?",
 		}
@@ -199,7 +137,7 @@ func TestLLMCondition(t *testing.T) {
 			response: newMockBoolResponse(false),
 		}
 
-		cond := LLMCondition{
+		cond := handlers.LLMCondition{
 			Generator: provider,
 			Prompt:    "Is this positive?",
 		}
@@ -213,4 +151,77 @@ func TestLLMCondition(t *testing.T) {
 		is.NoErr(err)
 		is.True(!result)
 	})
+}
+
+// switch_test.go
+
+func TestSwitch_MiddlewarePropagation(t *testing.T) {
+	is := is.New(t)
+
+	// Create handlers that support middleware
+	handler1 := &mockMiddlewareHandler{mockHandler: newMockHandler("handler1")}
+	handler2 := &mockMiddlewareHandler{mockHandler: newMockHandler("handler2")}
+	defaultHandler := &mockMiddlewareHandler{mockHandler: newMockHandler("default")}
+
+	// Create middleware that tracks execution
+	executionOrder := make([]string, 0)
+	mw := minds.MiddlewareFunc(func(next minds.ThreadHandler) minds.ThreadHandler {
+		return minds.ThreadHandlerFunc(func(tc minds.ThreadContext, _ minds.ThreadHandler) (minds.ThreadContext, error) {
+			executionOrder = append(executionOrder, "middleware_"+next.(*mockMiddlewareHandler).name)
+			result, err := next.HandleThread(tc, nil)
+			if err == nil {
+				executionOrder = append(executionOrder, "middleware_end_"+next.(*mockMiddlewareHandler).name)
+			}
+			return result, err
+		})
+	})
+
+	// Create switch with cases
+	sw := handlers.NewSwitch("test",
+		defaultHandler,
+		handlers.SwitchCase{
+			Condition: handlers.MetadataEquals{Key: "type", Value: "case1"},
+			Handler:   handler1,
+		},
+		handlers.SwitchCase{
+			Condition: handlers.MetadataEquals{Key: "type", Value: "case2"},
+			Handler:   handler2,
+		},
+	)
+	sw.Use(mw)
+
+	// Test case 1 handler
+	tc := minds.NewThreadContext(context.Background()).
+		WithMetadata(minds.Metadata{"type": "case1"})
+
+	_, err := sw.HandleThread(tc, nil)
+	is.NoErr(err)
+
+	// Verify middleware was applied
+	is.Equal(len(handler1.middleware), 1)
+
+	// Verify execution order
+	expected := []string{
+		"middleware_handler1",
+		"middleware_end_handler1",
+	}
+	is.Equal(executionOrder, expected)
+
+	// Test default handler
+	executionOrder = nil
+	tc = minds.NewThreadContext(context.Background()).
+		WithMetadata(minds.Metadata{"type": "unknown"})
+
+	_, err = sw.HandleThread(tc, nil)
+	is.NoErr(err)
+
+	// Verify middleware was applied to default handler
+	is.Equal(len(defaultHandler.middleware), 1)
+
+	// Verify execution order
+	expected = []string{
+		"middleware_default",
+		"middleware_end_default",
+	}
+	is.Equal(executionOrder, expected)
 }

@@ -233,3 +233,100 @@ func TestRetryOptions(t *testing.T) {
 		is.Equal(callCount, 5) // Should attempt all retries despite timeout
 	})
 }
+
+func TestRetryMiddleware_Composition(t *testing.T) {
+	t.Run("middleware chaining", func(t *testing.T) {
+		is := is.New(t)
+
+		// Create multiple middleware layers
+		loggingMiddleware := minds.NewMiddleware("logging", func(tc minds.ThreadContext) error {
+			tc.SetKeyValue("logged", true)
+			return nil
+		})
+
+		callCount := 0
+		mockHandler := minds.ThreadHandlerFunc(func(tc minds.ThreadContext, _ minds.ThreadHandler) (minds.ThreadContext, error) {
+			callCount++
+			logged, _ := tc.Metadata()["logged"].(bool)
+			is.True(logged)
+
+			if callCount < 3 {
+				return tc, errors.New("temporary error")
+			}
+			return tc, nil
+		})
+
+		// Chain middleware
+		retry := middleware.Retry("retry_test", retry.WithAttempts(3))
+
+		// Wrap handler with multiple middleware
+		handler := loggingMiddleware.Wrap(retry.Wrap(mockHandler))
+
+		ctx := minds.NewThreadContext(context.Background())
+		_, err := handler.HandleThread(ctx, nil)
+
+		is.NoErr(err)
+		is.Equal(callCount, 3)
+	})
+}
+
+// Custom error types
+type TemporaryError struct {
+	msg string
+}
+type PermanentError struct {
+	msg string
+}
+
+func (e TemporaryError) Error() string { return e.msg }
+
+func (e PermanentError) Error() string   { return e.msg }
+func (e TemporaryError) Temporary() bool { return true }
+
+func TestRetryMiddleware_ErrorPropagation(t *testing.T) {
+	t.Run("specific error types", func(t *testing.T) {
+		is := is.New(t)
+
+		mockHandler := minds.ThreadHandlerFunc(func(tc minds.ThreadContext, _ minds.ThreadHandler) (minds.ThreadContext, error) {
+			// First two attempts return temporary errors
+			// Third attempt returns permanent error
+			return tc, PermanentError{"unrecoverable error"}
+		})
+
+		// Custom retry criteria
+		retryCriteria := func(err error) bool {
+			te, ok := err.(interface{ Temporary() bool })
+			return ok && te.Temporary()
+		}
+
+		retry := middleware.Retry("retry_test",
+			retry.WithAttempts(3),
+			retry.WithRetryCriteria(retryCriteria),
+		)
+
+		handler := retry.Wrap(mockHandler)
+
+		ctx := minds.NewThreadContext(context.Background())
+		_, err := handler.HandleThread(ctx, nil)
+
+		is.True(err != nil)
+		is.True(errors.Is(err, PermanentError{"unrecoverable error"}))
+	})
+}
+
+func TestRetryMiddleware_InterfaceCompliance(t *testing.T) {
+	is := is.New(t)
+
+	// Verify Retry implements Middleware interface
+	retry := middleware.Retry("test")
+
+	is.True(retry != nil)
+
+	// Check Wrap method
+	mockHandler := minds.ThreadHandlerFunc(func(tc minds.ThreadContext, _ minds.ThreadHandler) (minds.ThreadContext, error) {
+		return tc, nil
+	})
+
+	wrappedHandler := retry.Wrap(mockHandler)
+	is.True(wrappedHandler != nil)
+}

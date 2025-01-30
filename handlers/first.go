@@ -8,48 +8,67 @@ import (
 	"github.com/chriscow/minds"
 )
 
-type firstHandler struct {
-	name     string
-	handlers []minds.ThreadHandler
+// First represents a handler that executes multiple handlers in parallel and returns
+// on first success. Each handler runs in its own goroutine, and execution of remaining
+// handlers is canceled once a successful result is obtained.
+type First struct {
+	name       string
+	handlers   []minds.ThreadHandler
+	middleware []minds.Middleware
 }
 
-// First creates a handler that runs multiple handlers in parallel and returns on first success.
-//
-// Handlers are executed concurrently and the first successful result is returned.
-// If all handlers fail, an error containing all handler errors is returned.
-// Processing is canceled for remaining handlers once a successful result is obtained.
-// If no handlers are provided, the thread context is passed to the next handler.
+// NewFirst creates a handler that runs multiple handlers in parallel and returns on
+// first success. If all handlers fail, an error containing all handler errors is
+// returned. If no handlers are provided, the thread context is passed to the next
+// handler unmodified.
 //
 // Parameters:
-//   - name: Identifier for this parallel handler group.
-//   - handlers: Variadic list of handlers to execute in parallel.
+//   - name: Identifier for this parallel handler group
+//   - handlers: Variadic list of handlers to execute in parallel
 //
 // Returns:
-//   - A handler that implements parallel execution with first-success semantics.
+//   - A First handler configured with the provided handlers
 //
 // Example:
 //
-//	first := handlers.First("validation",
+//	first := handlers.NewFirst("validation",
 //	    validateA,
 //	    validateB,
 //	    validateC,
 //	)
-func First(name string, handlers ...minds.ThreadHandler) *firstHandler {
-	return &firstHandler{name: name, handlers: handlers}
+func NewFirst(name string, handlers ...minds.ThreadHandler) *First {
+	return &First{
+		name:     name,
+		handlers: handlers,
+	}
 }
 
-func (h *firstHandler) String() string {
-	return fmt.Sprintf("Any(%s: %d handlers)", h.name, len(h.handlers))
+// Use applies middleware to the First handler, wrapping its child handlers.
+func (f *First) Use(middleware ...minds.Middleware) {
+	f.middleware = append(f.middleware, middleware...)
 }
 
-func (h *firstHandler) HandleThread(tc minds.ThreadContext, next minds.ThreadHandler) (minds.ThreadContext, error) {
-	if len(h.handlers) == 0 {
+// With returns a new First handler with the provided middleware applied.
+func (f *First) With(middleware ...minds.Middleware) minds.ThreadHandler {
+	newFirst := &First{
+		name:     f.name,
+		handlers: append([]minds.ThreadHandler{}, f.handlers...),
+	}
+	newFirst.Use(middleware...)
+	return newFirst
+}
+
+// HandleThread executes the First handler by running child handlers in parallel
+// and returning on first success.
+func (f *First) HandleThread(tc minds.ThreadContext, next minds.ThreadHandler) (minds.ThreadContext, error) {
+	if len(f.handlers) == 0 {
 		if next != nil {
 			return next.HandleThread(tc, nil)
 		}
 		return tc, nil
 	}
 
+	// Create a cancellable context for parallel execution
 	ctx, cancel := context.WithCancel(tc.Context())
 	defer cancel()
 
@@ -57,36 +76,57 @@ func (h *firstHandler) HandleThread(tc minds.ThreadContext, next minds.ThreadHan
 	resultChan := make(chan struct {
 		tc  minds.ThreadContext
 		err error
-	}, len(h.handlers))
+	}, len(f.handlers))
 
-	for _, handler := range h.handlers {
+	// Execute each handler in parallel
+	for i, h := range f.handlers {
 		wg.Add(1)
-		go func(handler minds.ThreadHandler) {
+		go func(handler minds.ThreadHandler, idx int) {
 			defer wg.Done()
 
+			// Check for cancellation before starting
 			if ctx.Err() != nil {
 				return
 			}
 
-			newTc, err := handler.HandleThread(tc, nil)
+			// Clone the context to prevent modifications from affecting other handlers
+			handlerCtx := tc.Clone().WithContext(ctx)
+
+			// Add handler metadata for middleware context
+			meta := handlerCtx.Metadata()
+			meta["handler_name"] = fmt.Sprintf("h%d", idx+1)
+			handlerCtx = handlerCtx.WithMetadata(meta)
+
+			// Apply middleware in reverse order
+			wrappedHandler := handler
+			for i := len(f.middleware) - 1; i >= 0; i-- {
+				wrappedHandler = f.middleware[i].Wrap(wrappedHandler)
+			}
+
+			// Execute the wrapped handler
+			result, err := wrappedHandler.HandleThread(handlerCtx, nil)
+
+			// Send result if not canceled
 			select {
 			case resultChan <- struct {
 				tc  minds.ThreadContext
 				err error
-			}{newTc, err}:
+			}{result, err}:
 				if err == nil {
 					cancel() // Cancel other handlers on success
 				}
 			case <-ctx.Done():
 			}
-		}(handler)
+		}(h, i)
 	}
 
+	// Close result channel when all handlers complete
 	go func() {
 		wg.Wait()
 		close(resultChan)
 	}()
 
+	// Collect errors and watch for success
 	var errors []error
 	for result := range resultChan {
 		if result.err == nil {
@@ -95,16 +135,23 @@ func (h *firstHandler) HandleThread(tc minds.ThreadContext, next minds.ThreadHan
 			}
 			return result.tc, nil
 		}
-		errors = append(errors, result.err)
+		errors = append(errors, fmt.Errorf("%w", result.err))
 	}
 
+	// Handle context cancellation
 	if ctx.Err() != nil {
 		return tc, ctx.Err()
 	}
 
+	// Return combined errors if all handlers failed
 	if len(errors) > 0 {
-		return tc, fmt.Errorf("all handlers failed: %v", errors)
+		return tc, fmt.Errorf("%s: all handlers failed: %v", f.name, errors)
 	}
 
 	return tc, nil
+}
+
+// String returns a string representation of the First handler.
+func (f *First) String() string {
+	return fmt.Sprintf("First(%s)", f.name)
 }

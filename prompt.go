@@ -14,9 +14,10 @@ import (
 
 type PromptHeader struct {
 	Name    string
-	Version string
-	Format  string
-	SHA256  string
+	Version string                 `yaml:"version,ignoreempty"`
+	Format  string                 `yaml:"format,ignoreempty"`
+	SHA256  string                 `yaml:"sha256,ignoreempty"`
+	Extra   map[string]interface{} `yaml:",inline"`
 }
 
 type Prompt struct {
