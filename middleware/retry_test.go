@@ -3,6 +3,7 @@ package middleware_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -161,33 +162,6 @@ func TestRetryOptions(t *testing.T) {
 		is.True(time.Since(startTime) >= 30*time.Millisecond) // Total backoff duration
 	})
 
-	t.Run("retry with custom criteria", func(t *testing.T) {
-		is := is.New(t)
-		callCount := 0
-
-		mockHandler := minds.ThreadHandlerFunc(func(tc minds.ThreadContext, _ minds.ThreadHandler) (minds.ThreadContext, error) {
-			callCount++
-			if callCount == 1 {
-				return tc, errors.New("non-retriable error")
-			}
-			return tc, errors.New("temporary error")
-		})
-
-		criteria := func(err error) bool {
-			return err.Error() == "temporary error"
-		}
-
-		retry := middleware.Retry("retry_criteria", retry.WithAttempts(5), retry.WithRetryCriteria(criteria))
-		handler := retry.Wrap(mockHandler)
-
-		ctx := minds.NewThreadContext(context.Background())
-		_, err := handler.HandleThread(ctx, nil)
-
-		is.True(err != nil)    // Expect an error
-		is.Equal(callCount, 1) // Should stop on non-retriable error
-		is.Equal(err.Error(), "retry_criteria: retry stopped due to error: non-retriable error")
-	})
-
 	t.Run("retry with context timeout propagation", func(t *testing.T) {
 		is := is.New(t)
 		callCount := 0
@@ -283,37 +257,6 @@ func (e TemporaryError) Error() string { return e.msg }
 func (e PermanentError) Error() string   { return e.msg }
 func (e TemporaryError) Temporary() bool { return true }
 
-func TestRetryMiddleware_ErrorPropagation(t *testing.T) {
-	t.Run("specific error types", func(t *testing.T) {
-		is := is.New(t)
-
-		mockHandler := minds.ThreadHandlerFunc(func(tc minds.ThreadContext, _ minds.ThreadHandler) (minds.ThreadContext, error) {
-			// First two attempts return temporary errors
-			// Third attempt returns permanent error
-			return tc, PermanentError{"unrecoverable error"}
-		})
-
-		// Custom retry criteria
-		retryCriteria := func(err error) bool {
-			te, ok := err.(interface{ Temporary() bool })
-			return ok && te.Temporary()
-		}
-
-		retry := middleware.Retry("retry_test",
-			retry.WithAttempts(3),
-			retry.WithRetryCriteria(retryCriteria),
-		)
-
-		handler := retry.Wrap(mockHandler)
-
-		ctx := minds.NewThreadContext(context.Background())
-		_, err := handler.HandleThread(ctx, nil)
-
-		is.True(err != nil)
-		is.True(errors.Is(err, PermanentError{"unrecoverable error"}))
-	})
-}
-
 func TestRetryMiddleware_InterfaceCompliance(t *testing.T) {
 	is := is.New(t)
 
@@ -329,4 +272,94 @@ func TestRetryMiddleware_InterfaceCompliance(t *testing.T) {
 
 	wrappedHandler := retry.Wrap(mockHandler)
 	is.True(wrappedHandler != nil)
+}
+
+func TestRetryMiddleware_ContextAwareCriteria(t *testing.T) {
+	is := is.New(t)
+	callCount := 0
+
+	// Mock handler that always fails
+	mockHandler := minds.ThreadHandlerFunc(func(tc minds.ThreadContext, _ minds.ThreadHandler) (minds.ThreadContext, error) {
+		callCount++
+		return tc, errors.New("always fails")
+	})
+
+	// Custom retry criteria: Stop retrying if attempt >= 2
+	customCriteria := func(tc minds.ThreadContext, attempt int, err error) bool {
+		return attempt < 2 // Retry only twice
+	}
+
+	retry := middleware.Retry("retry_test", retry.WithAttempts(5), retry.WithRetryCriteria(customCriteria))
+	handler := retry.Wrap(mockHandler)
+
+	ctx := minds.NewThreadContext(context.Background())
+	_, err := handler.HandleThread(ctx, nil)
+
+	is.True(err != nil)                                    // Expect an error
+	is.Equal(callCount, 3)                                 // Should retry exactly 2 times (1 initial + 2 retries)
+	is.True(strings.Contains(err.Error(), "always fails")) // Check original error
+}
+
+func TestRetryMiddleware_MetadataAwareCriteria(t *testing.T) {
+	is := is.New(t)
+	callCount := 0
+
+	// Mock handler that fails if metadata["force_fail"] == true
+	mockHandler := minds.ThreadHandlerFunc(func(tc minds.ThreadContext, _ minds.ThreadHandler) (minds.ThreadContext, error) {
+		callCount++
+		if meta, ok := tc.Metadata()["force_fail"].(bool); ok && meta {
+			return tc, errors.New("metadata failure")
+		}
+		return tc, nil
+	})
+
+	// Custom retry criteria: Stop if "no_retries" metadata is true
+	customCriteria := func(tc minds.ThreadContext, attempt int, err error) bool {
+		if meta, ok := tc.Metadata()["no_retries"].(bool); ok && meta {
+			return false // Don't retry
+		}
+		return true
+	}
+
+	// Create context with metadata
+	tc := minds.NewThreadContext(context.Background()).WithMetadata(map[string]interface{}{
+		"force_fail": true, // Force failure
+		"no_retries": true, // Disable retries
+	})
+
+	retry := middleware.Retry("metadata-retry", retry.WithAttempts(5), retry.WithRetryCriteria(customCriteria))
+	handler := retry.Wrap(mockHandler)
+
+	_, err := handler.HandleThread(tc, nil)
+
+	is.True(err != nil)    // Expect an error
+	is.Equal(callCount, 1) // Should NOT retry due to metadata
+}
+
+func TestRetryMiddleware_StopOnCertainErrors(t *testing.T) {
+	is := is.New(t)
+	callCount := 0
+
+	// Mock handler that fails with different errors
+	mockHandler := minds.ThreadHandlerFunc(func(tc minds.ThreadContext, _ minds.ThreadHandler) (minds.ThreadContext, error) {
+		callCount++
+		if callCount == 1 {
+			return tc, errors.New("temporary error")
+		}
+		return tc, errors.New("critical error")
+	})
+
+	// Custom retry criteria: Retry only on "temporary error"
+	customCriteria := func(tc minds.ThreadContext, attempt int, err error) bool {
+		return err.Error() == "temporary error"
+	}
+
+	retry := middleware.Retry("error-specific-retry", retry.WithAttempts(5), retry.WithRetryCriteria(customCriteria))
+	handler := retry.Wrap(mockHandler)
+
+	ctx := minds.NewThreadContext(context.Background())
+	_, err := handler.HandleThread(ctx, nil)
+
+	is.True(err != nil)    // Expect an error
+	is.Equal(callCount, 2) // Should stop retrying after "critical error"
 }

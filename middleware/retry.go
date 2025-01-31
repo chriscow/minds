@@ -54,7 +54,7 @@ type retryMiddleware struct {
 	config *retry.Options
 }
 
-// Wrap applies the retry behavior to the handler.
+// Wrap applies the retry behavior to a handler.
 func (r *retryMiddleware) Wrap(next minds.ThreadHandler) minds.ThreadHandler {
 	return &retryMiddleware{
 		name:   r.name,
@@ -88,7 +88,7 @@ func (r *retryMiddleware) HandleThread(tc minds.ThreadContext, _ minds.ThreadHan
 		}
 
 		// Stop retrying if error does not meet retry criteria
-		if !r.config.ShouldRetry(err) {
+		if !r.config.ShouldRetry(tc, attempt, err) {
 			return tc, fmt.Errorf("%s: retry stopped due to error: %w", r.name, err)
 		}
 
