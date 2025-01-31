@@ -92,9 +92,9 @@ func TestRetryMiddleware(t *testing.T) {
 		ctx := minds.NewThreadContext(context.Background())
 		result, err := handler.HandleThread(ctx, nil)
 
-		is.NoErr(err)          // No error expected
-		is.Equal(callCount, 0) // Handler should not be called
-		is.Equal(result, ctx)  // Context should remain unchanged
+		is.Equal(err.Error(), "failure") // No error expected
+		is.Equal(callCount, 1)           // Handler should be called once but no retries
+		is.Equal(result, ctx)            // Context should remain unchanged
 	})
 
 	t.Run("context remains unchanged", func(t *testing.T) {

@@ -83,57 +83,78 @@ func WithLogLevels(entry, exit, errorLevel slog.Level) LoggingOption {
 //	  WithLogMessages(false),
 //	  WithLogLevels(slog.LevelDebug, slog.LevelInfo, slog.LevelError)
 //	))
+
+// logger provides structured logging for handler execution.
+type logger struct {
+	name    string
+	options *LoggingOptions
+}
+
+// Logging creates a middleware instance for structured logging.
 func Logging(name string, opts ...LoggingOption) minds.Middleware {
-	// Apply configuration options
 	options := NewLoggingOptions()
 	for _, opt := range opts {
 		opt(options)
 	}
-
-	return minds.MiddlewareFunc(func(next minds.ThreadHandler) minds.ThreadHandler {
-		return minds.ThreadHandlerFunc(func(tc minds.ThreadContext, _ minds.ThreadHandler) (minds.ThreadContext, error) {
-			// Prepare base logging attributes
-			baseAttrs := []any{
-				"handler", name,
-				"thread_id", tc.UUID(),
-			}
-
-			// Log entry
-			logEntry(options, tc, baseAttrs, "entering handler", options.LogLevels.Entry)
-
-			// Execute handler with timing
-			start := time.Now()
-			result, err := next.HandleThread(tc, nil)
-			duration := time.Since(start)
-
-			// Prepare result attributes
-			resultAttrs := prepareResultAttributes(baseAttrs, result, options, duration)
-
-			// Handle and log errors
-			if err != nil {
-				resultAttrs = append(resultAttrs, "error", err.Error())
-				logEntry(options, tc, resultAttrs, "handler error", options.LogLevels.Error)
-				return result, err
-			}
-
-			// Log successful completion
-			logEntry(options, tc, resultAttrs, "exiting handler", options.LogLevels.Exit)
-
-			return result, nil
-		})
-	})
+	return &logger{name: name, options: options}
 }
 
-// logEntry handles logging with configurable options
+// Wrap applies the logging middleware to a handler.
+func (l *logger) Wrap(next minds.ThreadHandler) minds.ThreadHandler {
+	return &loggingHandler{
+		name:    l.name,
+		next:    next,
+		options: l.options,
+	}
+}
+
+// loggingHandler wraps a handler and logs execution details.
+type loggingHandler struct {
+	name    string
+	next    minds.ThreadHandler
+	options *LoggingOptions
+}
+
+// HandleThread logs execution details before and after processing.
+func (lh *loggingHandler) HandleThread(tc minds.ThreadContext, _ minds.ThreadHandler) (minds.ThreadContext, error) {
+	// Prepare logging attributes
+	baseAttrs := []any{
+		"handler", lh.name,
+		"thread_id", tc.UUID(),
+	}
+
+	// Log entry
+	logEntry(lh.options, tc, baseAttrs, "entering handler", lh.options.LogLevels.Entry)
+
+	// Start timer
+	start := time.Now()
+	result, err := lh.next.HandleThread(tc, nil)
+	duration := time.Since(start)
+
+	// Prepare result attributes
+	resultAttrs := prepareResultAttributes(baseAttrs, result, lh.options, duration)
+
+	// Log errors
+	if err != nil {
+		resultAttrs = append(resultAttrs, "error", err.Error())
+		logEntry(lh.options, tc, resultAttrs, "handler error", lh.options.LogLevels.Error)
+		return result, err
+	}
+
+	// Log successful exit
+	logEntry(lh.options, tc, resultAttrs, "exiting handler", lh.options.LogLevels.Exit)
+
+	return result, nil
+}
+
+// logEntry handles logging with configurable options.
 func logEntry(options *LoggingOptions, tc minds.ThreadContext, attrs []any, msg string, level slog.Level) {
 	options.Logger.LogAttrs(tc.Context(), level, msg, slog.Group("thread", attrs...))
 }
 
-// prepareResultAttributes builds logging attributes for the handler result
+// prepareResultAttributes builds logging attributes for the handler result.
 func prepareResultAttributes(baseAttrs []any, result minds.ThreadContext, options *LoggingOptions, duration time.Duration) []any {
-	attrs := make([]any, len(baseAttrs))
-	copy(attrs, baseAttrs)
-
+	attrs := append([]any{}, baseAttrs...) // Copy base attributes
 	attrs = append(attrs, "duration", duration)
 
 	if options.LogMessages {

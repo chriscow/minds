@@ -39,54 +39,76 @@ import (
 //   - Context is canceled (if timeout propagation is enabled)
 func Retry(name string, opts ...retry.Option) minds.Middleware {
 	return minds.MiddlewareFunc(func(next minds.ThreadHandler) minds.ThreadHandler {
-		return minds.ThreadHandlerFunc(func(tc minds.ThreadContext, _ minds.ThreadHandler) (minds.ThreadContext, error) {
-			// Apply retry configuration
-			config := retry.NewDefaultOptions()
-			for _, opt := range opts {
-				opt(config)
-			}
-
-			// Validate configuration
-			if config.Attempts <= 0 {
-				return tc, nil
-			}
-
-			var lastErr error
-
-			// Retry loop
-			for attempt := 0; attempt < config.Attempts; attempt++ {
-				// Check for context cancellation if timeout propagation is enabled
-				if config.PropagateTimeout {
-					select {
-					case <-tc.Context().Done():
-						return tc, fmt.Errorf("%s: context canceled: %w", name, tc.Context().Err())
-					default:
-					}
-				}
-
-				// Attempt to execute the handler
-				result, err := next.HandleThread(tc, nil)
-				if err == nil {
-					return result, nil
-				}
-
-				// Check if the error meets retry criteria
-				if !config.ShouldRetry(err) {
-					return tc, fmt.Errorf("%s: retry stopped due to error: %w", name, err)
-				}
-
-				lastErr = err
-
-				// Apply backoff strategy if configured
-				if config.Backoff != nil {
-					backoffDuration := config.Backoff(attempt)
-					time.Sleep(backoffDuration)
-				}
-			}
-
-			// Return error if all attempts fail
-			return tc, fmt.Errorf("%s: all %d attempts failed, last error: %w",
-				name, config.Attempts, lastErr)
-		})
+		return &retryMiddleware{
+			name:   name,
+			next:   next,
+			config: configureRetry(opts...),
+		}
 	})
+}
+
+// retryMiddleware wraps a handler with retry logic.
+type retryMiddleware struct {
+	name   string
+	next   minds.ThreadHandler
+	config *retry.Options
+}
+
+// Wrap applies the retry behavior to the handler.
+func (r *retryMiddleware) Wrap(next minds.ThreadHandler) minds.ThreadHandler {
+	return &retryMiddleware{
+		name:   r.name,
+		next:   next,
+		config: r.config,
+	}
+}
+
+// HandleThread executes the handler, retrying on failure.
+func (r *retryMiddleware) HandleThread(tc minds.ThreadContext, _ minds.ThreadHandler) (minds.ThreadContext, error) {
+	if r.config.Attempts <= 0 {
+		return r.next.HandleThread(tc, nil)
+	}
+
+	var lastErr error
+
+	for attempt := 0; attempt < r.config.Attempts; attempt++ {
+		// Handle timeout propagation
+		if r.config.PropagateTimeout {
+			select {
+			case <-tc.Context().Done():
+				return tc, fmt.Errorf("%s: context canceled: %w", r.name, tc.Context().Err())
+			default:
+			}
+		}
+
+		// Attempt execution
+		result, err := r.next.HandleThread(tc, nil)
+		if err == nil {
+			return result, nil
+		}
+
+		// Stop retrying if error does not meet retry criteria
+		if !r.config.ShouldRetry(err) {
+			return tc, fmt.Errorf("%s: retry stopped due to error: %w", r.name, err)
+		}
+
+		lastErr = err
+
+		// Apply backoff strategy if defined
+		if r.config.Backoff != nil {
+			time.Sleep(r.config.Backoff(attempt))
+		}
+	}
+
+	// Return last error if all attempts fail
+	return tc, fmt.Errorf("%s: all %d attempts failed, last error: %w", r.name, r.config.Attempts, lastErr)
+}
+
+// configureRetry applies provided options to a retry configuration.
+func configureRetry(opts ...retry.Option) *retry.Options {
+	config := retry.NewDefaultOptions()
+	for _, opt := range opts {
+		opt(config)
+	}
+	return config
 }
