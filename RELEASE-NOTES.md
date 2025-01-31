@@ -1,4 +1,52 @@
-## v0.0.5 - 2023-10-05
+## v0.0.6 - 2025-01-31
+
+### Summary
+This release includes major improvements for middleware support. 
+
+### Added
+
+- **If Handler**: New handler that conditionally executes a handler based on a predicate.
+- **Noop Handler**: New handler that does nothing, useful for testing and debugging.
+- **Logging Middleware**: New middleware for logging handler execution.
+
+### Removed
+
+- **ThreadFlow**: Originally intended to manage middleware chains, it has been removed in favor of a more flexible approach.
+
+### Changed
+
+- **Retry Middleware**: Added retry criteria and refactored to use new middleware pattern.
+
+### Fixed
+
+- **OpenAI Provider**: Fixed issue with system prompt not being set correctly. Added "Name" option.
+- **Sequence Handler**: Fixed issue where thread context changes were not propagated to the next handler.
+
+### Added
+- **OpenTelemetry Support**: Integrated tracing via `go.opentelemetry.io/otel`.
+- **New Handlers**:
+  - **MetadataEquals**: Enables conditional routing based on metadata keys.
+  - **PolicyValidator**: Validates thread content using an LLM with customizable result processing.
+- **New Middleware**:
+  - **Retry with Custom Criteria**: Enhanced retry mechanism with configurable backoff and retry conditions.
+- **New ThreadFlow Features**:
+  - Support for **Scoped Middleware Groups**, allowing different processing paths.
+  - **Sequential Execution Enhancements**: Improved execution order and thread state handling.
+
+### Changed
+- **ThreadFlow**: Middleware can now be applied at different scopes within a group.
+- **Handlers**:
+  - **Must, First, and Sequential** now provide better concurrency and error handling.
+  - **For Handler**: Improved iteration control with optional continuation functions.
+- **Retry Middleware**:
+  - Added support for configurable retry criteria, backoff strategies, and context propagation.
+
+### Removed
+- **Deprecated `Use` Middleware Method**: Fully replaced by the new `ThreadFlow` middleware pattern.
+
+
+
+## v0.0.5
 
 ## Summary
 

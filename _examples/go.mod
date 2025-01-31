@@ -17,7 +17,6 @@ replace github.com/chriscow/minds/tools => ../tools
 require (
 	github.com/chriscow/minds v0.0.5
 	github.com/chriscow/minds/providers/gemini v0.0.0-00010101000000-000000000000
-	github.com/chriscow/minds/providers/openai v0.0.5
 	github.com/chriscow/minds/tools v0.0.0-00010101000000-000000000000
 	github.com/fatih/color v1.18.0
 	golang.org/x/time v0.9.0
