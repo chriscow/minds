@@ -16,6 +16,12 @@ type SwitchCondition interface {
 	Evaluate(tc minds.ThreadContext) (bool, error)
 }
 
+type ConditionFunc func(tc minds.ThreadContext) (bool, error)
+
+func (f ConditionFunc) Evaluate(tc minds.ThreadContext) (bool, error) {
+	return f(tc)
+}
+
 // SwitchCase pairs a condition with a handler. When the condition evaluates to true,
 // the corresponding handler is executed.
 type SwitchCase struct {

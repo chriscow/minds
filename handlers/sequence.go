@@ -6,9 +6,9 @@ import (
 	"github.com/chriscow/minds"
 )
 
-// Sequence executes a series of handlers in order, stopping if any handler returns
+// sequence executes a series of handlers in order, stopping if any handler returns
 // an error. It supports middleware through the MiddlewareHandler interface.
-type Sequence struct {
+type sequence struct {
 	name       string
 	handlers   []minds.ThreadHandler
 	middleware []minds.Middleware
@@ -30,8 +30,8 @@ type Sequence struct {
 //	timeoutSeq := seq.With(TimeoutMiddleware())
 //
 //	result, err := seq.HandleThread(tc, nil)
-func NewSequence(name string, handlers ...minds.ThreadHandler) *Sequence {
-	return &Sequence{
+func NewSequence(name string, handlers ...minds.ThreadHandler) *sequence {
+	return &sequence{
 		name:       name,
 		handlers:   handlers,
 		middleware: make([]minds.Middleware, 0),
@@ -39,12 +39,12 @@ func NewSequence(name string, handlers ...minds.ThreadHandler) *Sequence {
 }
 
 // Use adds middleware that will wrap each child handler
-func (s *Sequence) Use(middleware ...minds.Middleware) {
+func (s *sequence) Use(middleware ...minds.Middleware) {
 	s.middleware = append(s.middleware, middleware...)
 }
 
 // HandleThread processes each handler in sequence, wrapping each with middleware
-func (s *Sequence) HandleThread(tc minds.ThreadContext, next minds.ThreadHandler) (minds.ThreadContext, error) {
+func (s *sequence) HandleThread(tc minds.ThreadContext, next minds.ThreadHandler) (minds.ThreadContext, error) {
 	current := tc
 
 	// Execute each handler in sequence
@@ -73,6 +73,6 @@ func (s *Sequence) HandleThread(tc minds.ThreadContext, next minds.ThreadHandler
 	return current, nil
 }
 
-func (s *Sequence) String() string {
+func (s *sequence) String() string {
 	return fmt.Sprintf("Sequence(%s)", s.name)
 }
