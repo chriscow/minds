@@ -38,6 +38,7 @@ func (p *Provider) HandleThread(tc minds.ThreadContext, next minds.ThreadHandler
 
 	msg := minds.Message{
 		Role:    minds.RoleAssistant,
+		Name:    p.options.name,
 		Content: resp.String(),
 	}
 
@@ -48,4 +49,8 @@ func (p *Provider) HandleThread(tc minds.ThreadContext, next minds.ThreadHandler
 	}
 
 	return tc, nil
+}
+
+func (p *Provider) String() string {
+	return fmt.Sprintf("OpenAI Provider: %s", p.options.name)
 }

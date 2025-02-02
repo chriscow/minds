@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -124,7 +125,11 @@ func (lh *loggingHandler) HandleThread(tc minds.ThreadContext, _ minds.ThreadHan
 	}
 
 	// Log entry
-	logEntry(lh.options, tc, baseAttrs, "entering handler", lh.options.LogLevels.Entry)
+	var name string
+	if h, ok := lh.next.(fmt.Stringer); ok {
+		name = ": " + h.String()
+	}
+	logEntry(lh.options, tc, baseAttrs, "entering handler"+name, lh.options.LogLevels.Entry)
 
 	// Start timer
 	start := time.Now()
@@ -142,7 +147,7 @@ func (lh *loggingHandler) HandleThread(tc minds.ThreadContext, _ minds.ThreadHan
 	}
 
 	// Log successful exit
-	logEntry(lh.options, tc, resultAttrs, "exiting handler", lh.options.LogLevels.Exit)
+	logEntry(lh.options, tc, resultAttrs, "exiting handler"+name, lh.options.LogLevels.Exit)
 
 	return result, nil
 }
