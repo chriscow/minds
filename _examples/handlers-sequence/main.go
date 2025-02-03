@@ -44,7 +44,7 @@ func main() {
 		Role: minds.RoleUser, Content: "We need to leverage blockchain AI to disrupt our coffee machine's paradigm",
 	})
 
-	comic := handlers.Sequential("comic", manager, engineer, manager, engineer)
+	comic := handlers.NewSequence("comic", manager, engineer, manager, engineer)
 	result, err := comic.HandleThread(tc, comic)
 	if err != nil {
 		log.Fatal(err)

@@ -81,7 +81,7 @@ func main() {
 func validationPipeline(llm minds.ContentGenerator) minds.ThreadHandler {
 	// Create policy validators with humorous but detectable rules
 	validators := []minds.ThreadHandler{
-		handlers.Policy(
+		handlers.NewPolicy(
 			llm,
 			"detects_dad_jokes",
 			`Monitor conversation for classic dad joke patterns like:
@@ -92,7 +92,7 @@ func validationPipeline(llm minds.ContentGenerator) minds.ThreadHandler {
 			Explain why they are definitely dad jokes.`,
 			nil,
 		),
-		handlers.Policy(
+		handlers.NewPolicy(
 			llm,
 			"detects_coffee_obsession",
 			`Analyze messages for signs of extreme coffee dependence:
@@ -103,7 +103,7 @@ func validationPipeline(llm minds.ContentGenerator) minds.ThreadHandler {
 			Provide concerned feedback about caffeine intake.`,
 			nil,
 		),
-		handlers.Policy(
+		handlers.NewPolicy(
 			llm,
 			"detects_unnecessary_jargon",
 			`Monitor for excessive business speak like:
@@ -117,5 +117,5 @@ func validationPipeline(llm minds.ContentGenerator) minds.ThreadHandler {
 		),
 	}
 
-	return handlers.Must("validators-must-succeed", nil, validators...)
+	return handlers.NewMust("validators-must-succeed", nil, validators...)
 }

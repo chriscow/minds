@@ -213,9 +213,9 @@ func TestRetryMiddleware_Composition(t *testing.T) {
 		is := is.New(t)
 
 		// Create multiple middleware layers
-		loggingMiddleware := minds.NewMiddleware("logging", func(tc minds.ThreadContext) error {
+		loggingMiddleware := minds.ThreadHandlerFunc(func(tc minds.ThreadContext, _ minds.ThreadHandler) (minds.ThreadContext, error) {
 			tc.SetKeyValue("logged", true)
-			return nil
+			return tc, nil
 		})
 
 		callCount := 0

@@ -23,11 +23,11 @@ func main() {
 	}
 
 	questionHandler := llm // let the llm answer questions
-	summaryHandler := handlers.Summarize(llm, "")
+	summaryHandler := handlers.NewSummarizer(llm, "")
 	defaultHandler := llm
 
 	// Define conditions and their handlers
-	intentSwitch := handlers.Switch("intent-router",
+	intentSwitch := handlers.NewSwitch("intent-router",
 		defaultHandler, // fallback handler
 		handlers.SwitchCase{
 			// Use LLM to check if message is a math question

@@ -77,18 +77,14 @@ func main() {
 		return tc, nil
 	})
 
-	round := handlers.Sequential("joke_round", geminiJoker, printJoke, openAIJoker, printJoke)
-
-	// Create a cycle that alternates between both LLMs, each followed by printing the joke
-	jokeCompetition := handlers.For("joke_exchange", 5, round, nil)
+	round := handlers.NewSequence("joke_round", geminiJoker, printJoke, openAIJoker, printJoke)
+	jokeCompetition := handlers.NewFor("joke_exchange", 5, round, nil)
 	jokeCompetition.Use(limiter)
 
 	// Initial prompt
-	initialThread := minds.NewThreadContext(ctx).WithMessages(minds.Messages{
-		{
-			Role:    minds.RoleUser,
-			Content: "You are in a joke telling contest. You go first.",
-		},
+	initialThread := minds.NewThreadContext(ctx).WithMessages(minds.Message{
+		Role:    minds.RoleUser,
+		Content: "You are in a joke telling contest. You go first.",
 	})
 
 	// Let them exchange jokes until context is canceled
