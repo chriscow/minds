@@ -10,6 +10,7 @@ import (
 )
 
 type Options struct {
+	name            string
 	apiKey          string
 	baseURL         string
 	modelName       string
@@ -23,6 +24,12 @@ type Options struct {
 }
 
 type Option func(*Options)
+
+func WithName(name string) Option {
+	return func(o *Options) {
+		o.name = name
+	}
+}
 
 func WithAPIKey(key string) Option {
 	return func(o *Options) {
