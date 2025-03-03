@@ -5,15 +5,17 @@ import (
 	"fmt"
 
 	"github.com/chriscow/minds"
+	"github.com/chriscow/minds/handlers/summarizer"
 )
 
-// summarize is a MessageHandler that takes the list of messages passed to it
-// and prompts the LLM provider to summarize the conversation so far. It returns
+// summarizer is a MessageHandler that takes the list of messages passed to it
+// and prompts the LLM provider to summarizer the conversation so far. It returns
 // a single message with the system message appended with the current summary.
 type summarize struct {
 	provider  minds.ContentGenerator
 	systemMsg string
 	summary   string
+	opts      summarizer.Options
 }
 
 // NewSummarizer creates a handler that maintains a running summary of thread messages.
@@ -31,11 +33,25 @@ type summarize struct {
 //
 // Note: The original thread context is not modified; a new context with the
 // updated system message is created.
-func NewSummarizer(provider minds.ContentGenerator, systemMsg string) *summarize {
-	return &summarize{
+func NewSummarizer(provider minds.ContentGenerator, systemMsg string, opts ...summarizer.Option) *summarize {
+	s := &summarize{
 		provider:  provider,
 		systemMsg: systemMsg,
+		opts: summarizer.Options{
+			Prompt: `
+			Your task is to create a concise running summary of responses and information
+			in the provided text, focusing on key and potentially important information
+			to remember. You will receive the current summary and your latest responses.
+			Combine them, adding relevant key information from the latest development
+			in 1st person past tense and keeping the summary concise.`,
+		},
 	}
+
+	for _, opt := range opts {
+		opt(&s.opts)
+	}
+
+	return s
 }
 
 func (s *summarize) HandleThread(tc minds.ThreadContext, next minds.ThreadHandler) (minds.ThreadContext, error) {
@@ -46,12 +62,6 @@ func (s *summarize) HandleThread(tc minds.ThreadContext, next minds.ThreadHandle
 	}
 
 	prompt := fmt.Sprintf(`
-Your task is to create a concise running summary of responses and information
-in the provided text, focusing on key and potentially important information
-to remember. You will receive the current summary and your latest responses.
-Combine them, adding relevant key information from the latest development
-in 1st person past tense and keeping the summary concise.
-
 Current Summary:
 """ %s """
 
@@ -60,6 +70,10 @@ Latest Responses:
 
 	req := minds.Request{
 		Messages: minds.Messages{
+			{
+				Role:    minds.RoleSystem,
+				Content: s.opts.Prompt,
+			},
 			{
 				Role:    minds.RoleUser,
 				Content: prompt,
