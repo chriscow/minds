@@ -350,7 +350,7 @@ func main() {
 		WithMessages(minds.Messages{
 			{Role: minds.RoleUser, Content: "What is 7 * 12 + 5?"},
 		}).
-		WithMetadata(map[string]interface{}{
+		WithMetadata(map[string]any{
 			"type": "math",
 		})
 

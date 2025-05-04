@@ -15,7 +15,7 @@ import (
 func TestRange_ContextCanceled(t *testing.T) {
 	is := is.New(t)
 	handler := &mockHandler{name: "handler"}
-	values := []interface{}{"a", "b", "c"}
+	values := []any{"a", "b", "c"}
 
 	ranger := handlers.NewRange("test", handler, values...)
 
@@ -35,7 +35,7 @@ func TestRange_Success(t *testing.T) {
 	is := is.New(t)
 	handler := &mockHandler{name: "handler"}
 	final := &mockHandler{name: "final"}
-	values := []interface{}{"a", "b", "c"}
+	values := []any{"a", "b", "c"}
 
 	ranger := handlers.NewRange("test", handler, values...)
 	tc := minds.NewThreadContext(context.Background())
@@ -51,7 +51,7 @@ func TestRange_WithMiddleware(t *testing.T) {
 	is := is.New(t)
 	handler := &mockHandler{name: "handler"}
 	middleware := &mockMiddleware{name: "test-middleware"}
-	values := []interface{}{"a", "b", "c"}
+	values := []any{"a", "b", "c"}
 
 	ranger := handlers.NewRange("test", handler, values...)
 	ranger.Use(middleware)
@@ -69,7 +69,7 @@ func TestRange_WithError(t *testing.T) {
 	is := is.New(t)
 	handler := &mockHandler{name: "handler", expectedErr: errHandlerFailed}
 	final := &mockHandler{name: "final"}
-	values := []interface{}{"a", "b", "c"}
+	values := []any{"a", "b", "c"}
 
 	ranger := handlers.NewRange("test", handler, values...)
 	tc := minds.NewThreadContext(context.Background())
@@ -85,8 +85,8 @@ func TestRange_WithError(t *testing.T) {
 
 func TestRange_ValueInContext(t *testing.T) {
 	is := is.New(t)
-	values := []interface{}{"a", "b", "c"}
-	var seenValues []interface{}
+	values := []any{"a", "b", "c"}
+	var seenValues []any
 
 	handler := minds.ThreadHandlerFunc(func(tc minds.ThreadContext, next minds.ThreadHandler) (minds.ThreadContext, error) {
 		seenValues = append(seenValues, tc.Metadata()["range_value"])

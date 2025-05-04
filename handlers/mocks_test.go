@@ -33,7 +33,7 @@ type mockHandler struct {
 	started       int32
 	completed     int32
 	tcResult      minds.ThreadContext
-	metadata      map[string]interface{}
+	metadata      map[string]any
 	mu            sync.Mutex
 	customExecute func() // Added for flexible execution behavior
 }
@@ -41,7 +41,7 @@ type mockHandler struct {
 func newMockHandler(name string) *mockHandler {
 	return &mockHandler{
 		name:     name,
-		metadata: make(map[string]interface{}),
+		metadata: make(map[string]any),
 	}
 }
 
@@ -123,7 +123,7 @@ func newMockMiddlewareHandler(name string) *mockMiddlewareHandler {
 	return &mockMiddlewareHandler{
 		mockHandler: &mockHandler{
 			name:     name,
-			metadata: make(map[string]interface{}),
+			metadata: make(map[string]any),
 		},
 	}
 }

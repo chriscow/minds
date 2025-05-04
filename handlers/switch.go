@@ -124,7 +124,7 @@ func (s *Switch) String() string {
 // MetadataEquals checks if a metadata key equals a specific value.
 type MetadataEquals struct {
 	Key   string
-	Value interface{}
+	Value any
 }
 
 // Evaluate checks if the metadata value for the specified key equals the target value.

@@ -96,7 +96,7 @@ func query(ctx context.Context, query string) (string, error) {
 		return "", fmt.Errorf("coping data in serpapi: %w", err)
 	}
 
-	var result map[string]interface{}
+	var result map[string]any
 	err = json.Unmarshal(buf.Bytes(), &result)
 	if err != nil {
 		return "", fmt.Errorf("unmarshal data in serpapi: %w", err)
@@ -105,7 +105,7 @@ func query(ctx context.Context, query string) (string, error) {
 	return processResponse(result)
 }
 
-func processResponse(res map[string]interface{}) (string, error) {
+func processResponse(res map[string]any) (string, error) {
 	if errorValue, ok := res["error"]; ok {
 		return "", fmt.Errorf("%w: %v", ErrAPIError, errorValue)
 	}
@@ -125,8 +125,8 @@ func processResponse(res map[string]interface{}) (string, error) {
 	return "", ErrNoGoodResult
 }
 
-func getAnswerBox(res map[string]interface{}) string {
-	answerBox, answerBoxExists := res["answer_box"].(map[string]interface{})
+func getAnswerBox(res map[string]any) string {
+	answerBox, answerBoxExists := res["answer_box"].(map[string]any)
 	if answerBoxExists {
 		if answer, ok := answerBox["answer"].(string); ok {
 			return answer
@@ -134,7 +134,7 @@ func getAnswerBox(res map[string]interface{}) string {
 		if snippet, ok := answerBox["snippet"].(string); ok {
 			return snippet
 		}
-		snippetHighlightedWords, ok := answerBox["snippet_highlighted_words"].([]interface{})
+		snippetHighlightedWords, ok := answerBox["snippet_highlighted_words"].([]any)
 		if ok && len(snippetHighlightedWords) > 0 {
 			return fmt.Sprintf("%v", snippetHighlightedWords[0])
 		}
@@ -143,8 +143,8 @@ func getAnswerBox(res map[string]interface{}) string {
 	return ""
 }
 
-func getSportResult(res map[string]interface{}) string {
-	sportsResults, sportsResultsExists := res["sports_results"].(map[string]interface{})
+func getSportResult(res map[string]any) string {
+	sportsResults, sportsResultsExists := res["sports_results"].(map[string]any)
 	if sportsResultsExists {
 		if gameSpotlight, ok := sportsResults["game_spotlight"].(string); ok {
 			return gameSpotlight
@@ -154,8 +154,8 @@ func getSportResult(res map[string]interface{}) string {
 	return ""
 }
 
-func getKnowledgeGraph(res map[string]interface{}) string {
-	knowledgeGraph, knowledgeGraphExists := res["knowledge_graph"].(map[string]interface{})
+func getKnowledgeGraph(res map[string]any) string {
+	knowledgeGraph, knowledgeGraphExists := res["knowledge_graph"].(map[string]any)
 	if knowledgeGraphExists {
 		if description, ok := knowledgeGraph["description"].(string); ok {
 			return description
@@ -165,11 +165,11 @@ func getKnowledgeGraph(res map[string]interface{}) string {
 	return ""
 }
 
-func getOrganicResult(res map[string]interface{}) string {
-	organicResults, organicResultsExists := res["organic_results"].([]interface{})
+func getOrganicResult(res map[string]any) string {
+	organicResults, organicResultsExists := res["organic_results"].([]any)
 
 	if organicResultsExists && len(organicResults) > 0 {
-		organicResult, ok := organicResults[0].(map[string]interface{})
+		organicResult, ok := organicResults[0].(map[string]any)
 		if ok {
 			if snippet, ok := organicResult["snippet"].(string); ok {
 				return snippet

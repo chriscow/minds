@@ -246,7 +246,7 @@ func TestFirst_ThreadContextIsolation(t *testing.T) {
 	is := is.New(t)
 
 	var mu sync.Mutex
-	metadata := make(map[string]interface{})
+	metadata := make(map[string]any)
 
 	// Create handlers that modify thread context
 	h1 := minds.ThreadHandlerFunc(func(tc minds.ThreadContext, next minds.ThreadHandler) (minds.ThreadContext, error) {

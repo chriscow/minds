@@ -60,7 +60,7 @@ func main() {
 	// Initial thread with metadata
 	thread := minds.NewThreadContext(context.Background()).
 		WithMessages(minds.Message{Role: minds.RoleUser, Content: "What is 7 * 12 + 5?"}).
-		WithMetadata(map[string]interface{}{
+		WithMetadata(map[string]any{
 			"type": "calculation",
 		})
 

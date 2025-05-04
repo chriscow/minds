@@ -322,7 +322,7 @@ func TestRetryMiddleware_MetadataAwareCriteria(t *testing.T) {
 	}
 
 	// Create context with metadata
-	tc := minds.NewThreadContext(context.Background()).WithMetadata(map[string]interface{}{
+	tc := minds.NewThreadContext(context.Background()).WithMetadata(map[string]any{
 		"force_fail": true, // Force failure
 		"no_retries": true, // Disable retries
 	})

@@ -217,7 +217,7 @@ func TestMust_ThreadContextIsolation(t *testing.T) {
 	is := is.New(t)
 
 	var mu sync.Mutex
-	metadata := make(map[string]interface{})
+	metadata := make(map[string]any)
 
 	h1 := &mockMiddlewareHandler{
 		mockHandler: &mockHandler{

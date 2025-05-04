@@ -14,10 +14,10 @@ import (
 
 type PromptHeader struct {
 	Name    string
-	Version string                 `yaml:"version,ignoreempty"`
-	Format  string                 `yaml:"format,ignoreempty"`
-	SHA256  string                 `yaml:"sha256,ignoreempty"`
-	Extra   map[string]interface{} `yaml:",inline"`
+	Version string         `yaml:"version,ignoreempty"`
+	Format  string         `yaml:"format,ignoreempty"`
+	SHA256  string         `yaml:"sha256,ignoreempty"`
+	Extra   map[string]any `yaml:",inline"`
 }
 
 type Prompt struct {
@@ -25,7 +25,7 @@ type Prompt struct {
 	Template *template.Template
 }
 
-func (p Prompt) Execute(data interface{}) (string, error) {
+func (p Prompt) Execute(data any) (string, error) {
 	var result strings.Builder
 	if err := p.Template.Execute(&result, data); err != nil {
 		return "", err
