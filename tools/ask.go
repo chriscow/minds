@@ -30,9 +30,23 @@ const (
 var MockLLMResponse = "mock-llm-response"
 var MockLLMError error = nil
 
-// Ask sends a prompt to an LLM and returns the response. If the
-// LLM_DEFAULT_MODEL is not set, it will use GPT41Nano.
-func Ask(ctx context.Context, prompt string) (string, error) {
+// Option represents a functional option for configuring LLM requests
+type Option func(*options)
+
+// options holds all configurable options for LLM requests
+type options struct {
+	model string
+}
+
+// WithModel returns an Option that sets the model to use
+func WithModel(model string) Option {
+	return func(o *options) {
+		o.model = model
+	}
+}
+
+// getDefaultModel returns the default model from environment variables
+func getDefaultModel() string {
 	model := os.Getenv("LLM_DEFAULT_MODEL")
 	if model == "" {
 		model = os.Getenv("OPENAI_DEFAULT_MODEL")
@@ -40,38 +54,54 @@ func Ask(ctx context.Context, prompt string) (string, error) {
 			model = GPT41Nano
 		}
 	}
-	return AskModel(ctx, prompt, model)
+	return model
 }
 
-// AskModel sends a prompt to an LLM and returns the response using a specific model.
-// The LLM provider is determined by the model variable.
-func AskModel(ctx context.Context, prompt string, model string) (string, error) {
-	switch model {
+// Ask sends a prompt to an LLM and returns the response.
+// It accepts optional WithModel() to specify a model, otherwise uses default.
+func Ask(ctx context.Context, prompt string, opts ...Option) (string, error) {
+	// Process options
+	o := &options{
+		model: getDefaultModel(),
+	}
+
+	for _, opt := range opts {
+		opt(o)
+	}
+
+	switch o.model {
 	case GPT41Nano, GPT41Mini, GPT41, GPT4oMini, O4Mini, O3Mini:
-		return AskOpenAIModel(ctx, prompt, model)
+		return AskOpenAI(ctx, prompt, WithModel(o.model))
 	case MockModel:
 		return MockLLMResponse, nil
 	default:
-		return "", fmt.Errorf("unknown model: %s", model)
+		return "", fmt.Errorf("unknown model: %s", o.model)
 	}
 }
 
-func AskOpenAI(ctx context.Context, prompt string) (string, error) {
-	model := os.Getenv("OPENAI_DEFAULT_MODEL")
-	if model == "" {
-		model = GPT41Nano
+// AskOpenAI sends a prompt to OpenAI and returns the response.
+// It accepts optional WithModel() to specify a model, otherwise uses default.
+func AskOpenAI(ctx context.Context, prompt string, opts ...Option) (string, error) {
+	// Process options
+	o := &options{
+		model: os.Getenv("OPENAI_DEFAULT_MODEL"),
 	}
-	return AskOpenAIModel(ctx, prompt, model)
-}
 
-func AskOpenAIModel(ctx context.Context, prompt string, model string) (string, error) {
+	if o.model == "" {
+		o.model = GPT41Nano
+	}
+
+	for _, opt := range opts {
+		opt(o)
+	}
+
 	if os.Getenv("OPENAI_API_KEY") == "" {
 		return "", fmt.Errorf("OPENAI_API_KEY is not set")
 	}
 
 	client := openai.NewClient(os.Getenv("OPENAI_API_KEY"))
 	resp, err := client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
-		Model:     model,
+		Model:     o.model,
 		Messages:  []openai.ChatCompletionMessage{{Role: openai.ChatMessageRoleUser, Content: prompt}},
 		MaxTokens: maxResponseTokens,
 	})
@@ -81,35 +111,50 @@ func AskOpenAIModel(ctx context.Context, prompt string, model string) (string, e
 	return resp.Choices[0].Message.Content, nil
 }
 
-func StructuredAsk[T any](ctx context.Context, name, prompt string) (T, error) {
-	model := os.Getenv("LLM_DEFAULT_MODEL")
-	if model == "" {
-		model = os.Getenv("OPENAI_DEFAULT_MODEL")
-		if model == "" {
-			model = GPT41Nano
-		}
+// StructuredAsk sends a prompt to an LLM and returns a structured response of type T.
+// It accepts optional WithModel() to specify a model, otherwise uses default.
+func StructuredAsk[T any](ctx context.Context, name, prompt string, opts ...Option) (T, error) {
+	// Process options
+	o := &options{
+		model: getDefaultModel(),
 	}
 
-	return StructuredAskModel[T](ctx, name, prompt, model)
-}
+	for _, opt := range opts {
+		opt(o)
+	}
 
-func StructuredAskModel[T any](ctx context.Context, name, prompt, model string) (T, error) {
 	var zero T // Zero value to return in error cases
-	switch model {
+
+	switch o.model {
 	case GPT41Nano, GPT41Mini, GPT41, GPT4oMini, O4Mini, O3Mini:
-		return StructuredAskOpenAIModel[T](ctx, name, prompt, model)
+		return StructuredAskOpenAI[T](ctx, name, prompt, WithModel(o.model))
 	case MockModel:
 		if err := json.Unmarshal([]byte(MockLLMResponse), &zero); err != nil {
 			return zero, fmt.Errorf("failed to unmarshal mock response: %w", err)
 		}
 		return zero, MockLLMError
 	default:
-		return zero, fmt.Errorf("unknown model: %s", model)
+		return zero, fmt.Errorf("unknown model: %s", o.model)
 	}
 }
 
-func StructuredAskOpenAIModel[T any](ctx context.Context, name, prompt, model string) (T, error) {
+// StructuredAskOpenAI sends a prompt to OpenAI and returns a structured response of type T.
+// It accepts optional WithModel() to specify a model, otherwise uses default.
+func StructuredAskOpenAI[T any](ctx context.Context, name, prompt string, opts ...Option) (T, error) {
 	var zero T // Zero value to return in error cases
+
+	// Process options
+	o := &options{
+		model: os.Getenv("OPENAI_DEFAULT_MODEL"),
+	}
+
+	if o.model == "" {
+		o.model = GPT41Nano
+	}
+
+	for _, opt := range opts {
+		opt(o)
+	}
 
 	if os.Getenv("OPENAI_API_KEY") == "" {
 		return zero, fmt.Errorf("OPENAI_API_KEY is not set")
@@ -122,7 +167,7 @@ func StructuredAskOpenAIModel[T any](ctx context.Context, name, prompt, model st
 
 	client := openai.NewClient(os.Getenv("OPENAI_API_KEY"))
 	resp, err := client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
-		Model:     model,
+		Model:     o.model,
 		Messages:  []openai.ChatCompletionMessage{{Role: openai.ChatMessageRoleUser, Content: prompt}},
 		MaxTokens: maxResponseTokens,
 		ResponseFormat: &openai.ChatCompletionResponseFormat{
