@@ -60,12 +60,12 @@ func TestSwitch(t *testing.T) {
 
 		_, err := sw.HandleThread(tc, nil)
 		is.NoErr(err)
-		is.True(0 == handler1.Started())         // Handler should not be called
-		is.True(1 == defaultHandler.Completed()) // Default handler should be called
+		is.True(handler1.Started() == 0)         // Handler should not be called
+		is.True(defaultHandler.Completed() == 1) // Default handler should be called
 	})
 }
 
-func Testhandlers_MetadataEquals(t *testing.T) {
+func TestMetadataEquals(t *testing.T) {
 	is := is.New(t)
 
 	t.Run("matches existing key and value", func(t *testing.T) {
