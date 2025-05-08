@@ -156,6 +156,40 @@ func TestStructuredAsk(t *testing.T) {
 	}
 }
 
+func TestStructuredAskIntegration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		t.Fatalf("OPENAI_API_KEY is not set")
+	}
+
+	type result struct {
+		LuckyNumber int `json:"lucky_number"`
+	}
+
+	response, err := StructuredAsk[result](context.Background(), "lucky_number", "What is today's lucky number greater than 0?")
+	if err != nil {
+		t.Fatalf("failed to ask: %v", err)
+	}
+
+	if response.LuckyNumber <= 0 {
+		t.Fatalf("expected lucky number greater than 0, got %d", response.LuckyNumber)
+	}
+
+	// test with deepseek
+	response, err = StructuredAsk[result](context.Background(), "lucky_number", "What is today's lucky number greater than 0? Respond in JSON.", WithModel(DeepSeekChat))
+	if err != nil {
+		t.Fatalf("failed to ask: %v", err)
+	}
+
+	if response.LuckyNumber <= 0 {
+		t.Fatalf("expected lucky number greater than 0, got %d", response.LuckyNumber)
+	}
+}
+
 func TestStructuredAskWithError(t *testing.T) {
 	// Test unmarshal error
 	os.Setenv("LLM_DEFAULT_MODEL", MockModel)
@@ -182,5 +216,76 @@ func TestStructuredAskWithError(t *testing.T) {
 	_, err = StructuredAsk[result](context.Background(), "answer", "What is the capital of the moon?")
 	if err != MockLLMError {
 		t.Fatalf("expected %v, got %v", MockLLMError, err)
+	}
+}
+
+func TestAskWithDeepSeekURL(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		t.Skip("skipping test because OPENAI_API_KEY is not set")
+	}
+
+	// Set up test context
+	ctx := context.Background()
+	prompt := "Say 'cheese!"
+
+	// Test with DeepSeek API URL via WithModel option
+	resp1, err := Ask(ctx, prompt, WithModel(DeepSeekChat))
+	if err != nil {
+		t.Fatalf("Ask with DeepSeek URL failed: %v", err)
+	}
+
+	t.Logf("Response: %s", resp1)
+	if resp1 == "" {
+		t.Fatal("Expected non-empty response, got empty")
+	}
+}
+
+func TestAPIKeyPassthrough(t *testing.T) {
+	// Save original env var to restore later
+	origAPIKey := os.Getenv("OPENAI_API_KEY")
+	defer os.Setenv("OPENAI_API_KEY", origAPIKey)
+
+	// Clear environment variable to ensure we're testing option passing
+	os.Setenv("OPENAI_API_KEY", "")
+
+	// Test 1: Custom API key provided via WithAPIKey option
+	customAPIKey := "test-api-key"
+	opts := GetOptionsFromAskOptions(WithModel(DeepSeekChat), WithAPIKey(customAPIKey))
+
+	// Verify the API key was passed correctly
+	if opts.apiKey != customAPIKey {
+		t.Errorf("API key not passed correctly via options. Expected: %s, Got: %s", customAPIKey, opts.apiKey)
+	}
+
+	// Test 2: API key from environment
+	testEnvAPIKey := "env-test-api-key"
+	os.Setenv("OPENAI_API_KEY", testEnvAPIKey)
+
+	opts = GetOptionsFromAskOptions(WithModel(DeepSeekChat))
+
+	// Verify the API key was retrieved from environment
+	if opts.apiKey != testEnvAPIKey {
+		t.Errorf("API key not retrieved from environment. Expected: %s, Got: %s", testEnvAPIKey, opts.apiKey)
+	}
+
+	// Test 3: Use the mock model to verify the flow works end to end
+	origLLM := os.Getenv("LLM_DEFAULT_MODEL")
+	defer os.Setenv("LLM_DEFAULT_MODEL", origLLM)
+
+	MockLLMResponse = "mock-api-key-test-response"
+	MockLLMError = nil
+
+	response, err := Ask(context.Background(), "test prompt", WithModel(MockModel), WithAPIKey(customAPIKey))
+	if err != nil {
+		t.Fatalf("Ask failed with custom API key: %v", err)
+	}
+
+	if response != MockLLMResponse {
+		t.Errorf("Expected response %s, got %s", MockLLMResponse, response)
 	}
 }

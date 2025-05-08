@@ -13,16 +13,22 @@ import (
 )
 
 const (
-	GPT41Nano = "gpt-4.1-nano" // $0.10 input	$0.025 cached output	$0.40 output
-	GPT41Mini = "gpt-4.1-mini" // $0.40 input	$0.10 cached output		$1.60 output
-	GPT41     = "gpt-4.1"      // $2.00 input	$0.50 cached output		$8.00 output
+	OpenAIAPIURLv1 = "https://api.openai.com/v1"
+	DeepSeekAPIURL = "https://api.deepseek.com"
 
-	GPT4oMini = "gpt-4o-mini" // $0.15 input	$0.075 cached output	$0.60 output
+	GPT41Nano = "gpt-4.1-nano" // $0.10 input	$0.025 cached input	$0.40 output
+	GPT41Mini = "gpt-4.1-mini" // $0.40 input	$0.10 cached input	$1.60 output
+	GPT41     = "gpt-4.1"      // $2.00 input	$0.50 cached input	$8.00 output
 
-	O4Mini = "o4-mini" // $1.10 input	$0.275 cached output	$4.40 output
-	O3Mini = "o3-mini" // $1.10 input	$0.55 cached output		$4.40 output
+	GPT4oMini = "gpt-4o-mini" // $0.15 input	$0.075 cached input	$0.60 output
 
-	openaiAPIURLv1 = "https://api.openai.com/v1"
+	O4Mini = "o4-mini" // $1.10 input	$0.275 cached input	$4.40 output
+	O3Mini = "o3-mini" // $1.10 input	$0.55 cached input	$4.40 output
+
+	// DeepSeek Chat Discounted UTC 16:30-00:30 50% off    10:30 AM – 6:30 PM Mountain Daylight Time (MDT) Mar-Nov
+	DeepSeekChat = "deepseek-chat" // $0.27 input	$0.07 cached input	$1.10 output
+	// DeepSeek Reasoner Discounted UTC 16:30-00:30 75% off (same as chat!) 10:30 AM – 6:30 PM Mountain Daylight Time (MDT) Mar-Nov
+	DeepSeekReasoner = "deepseek-reasoner" // $0.55 input $0.14 cached input $2.19 output output
 
 	MockModel = "mock-model"
 
@@ -76,7 +82,7 @@ func getDefaultModel() string {
 // Ask sends a prompt to an LLM and returns the response.
 // It accepts optional WithModel() to specify a model, otherwise uses default.
 func Ask(ctx context.Context, prompt string, opts ...Option) (string, error) {
-	// Process options
+	// Process options only to determine the model
 	o := &options{
 		model: getDefaultModel(),
 	}
@@ -87,7 +93,15 @@ func Ask(ctx context.Context, prompt string, opts ...Option) (string, error) {
 
 	switch o.model {
 	case GPT41Nano, GPT41Mini, GPT41, GPT4oMini, O4Mini, O3Mini:
-		return AskOpenAI(ctx, prompt, WithModel(o.model), WithBaseURL(o.baseURL), WithAPIKey(o.apiKey))
+		return AskOpenAI(ctx, prompt, opts...)
+
+	case DeepSeekChat, DeepSeekReasoner:
+		// For DeepSeek models, we need to ensure the base URL is set correctly
+		// Create a new options slice with the DeepSeek base URL
+		deepSeekOpts := append([]Option{}, opts...)
+		deepSeekOpts = append(deepSeekOpts, WithBaseURL(DeepSeekAPIURL), WithAPIKey(os.Getenv("DEEPSEEK_API_KEY")))
+		return AskOpenAI(ctx, prompt, deepSeekOpts...)
+
 	case MockModel:
 		return MockLLMResponse, nil
 	default:
@@ -110,7 +124,7 @@ func AskOpenAI(ctx context.Context, prompt string, opts ...Option) (string, erro
 	}
 
 	if o.baseURL == "" {
-		o.baseURL = openaiAPIURLv1
+		o.baseURL = OpenAIAPIURLv1
 	}
 
 	for _, opt := range opts {
@@ -139,7 +153,7 @@ func AskOpenAI(ctx context.Context, prompt string, opts ...Option) (string, erro
 // StructuredAsk sends a prompt to an LLM and returns a structured response of type T.
 // It accepts optional WithModel() to specify a model, otherwise uses default.
 func StructuredAsk[T any](ctx context.Context, name, prompt string, opts ...Option) (T, error) {
-	// Process options
+	// Process options only to determine the model
 	o := &options{
 		model: getDefaultModel(),
 	}
@@ -152,7 +166,12 @@ func StructuredAsk[T any](ctx context.Context, name, prompt string, opts ...Opti
 
 	switch o.model {
 	case GPT41Nano, GPT41Mini, GPT41, GPT4oMini, O4Mini, O3Mini:
-		return StructuredAskOpenAI[T](ctx, name, prompt, WithModel(o.model))
+		return StructuredAskOpenAI[T](ctx, name, prompt, opts...)
+	case DeepSeekChat, DeepSeekReasoner:
+		// For DeepSeek models, we need to ensure the base URL is set correctly
+		o.apiKey = os.Getenv("DEEPSEEK_API_KEY")
+		o.baseURL = DeepSeekAPIURL
+		return StructuredAskOpenAI[T](ctx, name, prompt, WithModel(o.model), WithBaseURL(o.baseURL), WithAPIKey(o.apiKey))
 	case MockModel:
 		if err := json.Unmarshal([]byte(MockLLMResponse), &zero); err != nil {
 			return zero, fmt.Errorf("failed to unmarshal mock response: %w", err)
@@ -180,7 +199,7 @@ func StructuredAskOpenAI[T any](ctx context.Context, name, prompt string, opts .
 	}
 
 	if o.baseURL == "" {
-		o.baseURL = openaiAPIURLv1
+		o.baseURL = OpenAIAPIURLv1
 	}
 
 	for _, opt := range opts {
@@ -199,19 +218,25 @@ func StructuredAskOpenAI[T any](ctx context.Context, name, prompt string, opts .
 		return zero, fmt.Errorf("failed to generate schema: %w", err)
 	}
 
+	responseFormat := openai.ChatCompletionResponseFormat{
+		Type: openai.ChatCompletionResponseFormatTypeJSONSchema,
+		JSONSchema: &openai.ChatCompletionResponseFormatJSONSchema{
+			Name:   name,
+			Schema: schema,
+			Strict: true,
+		},
+	}
+	if o.model == DeepSeekChat || o.model == DeepSeekReasoner {
+		responseFormat.Type = openai.ChatCompletionResponseFormatTypeJSONObject
+		responseFormat.JSONSchema = nil
+	}
+
 	client := openai.NewClientWithConfig(config)
 	resp, err := client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
-		Model:     o.model,
-		Messages:  []openai.ChatCompletionMessage{{Role: openai.ChatMessageRoleUser, Content: prompt}},
-		MaxTokens: maxResponseTokens,
-		ResponseFormat: &openai.ChatCompletionResponseFormat{
-			Type: openai.ChatCompletionResponseFormatTypeJSONSchema,
-			JSONSchema: &openai.ChatCompletionResponseFormatJSONSchema{
-				Name:   name,
-				Schema: schema,
-				Strict: true,
-			},
-		},
+		Model:          o.model,
+		Messages:       []openai.ChatCompletionMessage{{Role: openai.ChatMessageRoleUser, Content: prompt}},
+		MaxTokens:      maxResponseTokens,
+		ResponseFormat: &responseFormat,
 	})
 	if err != nil {
 		return zero, fmt.Errorf("failed to get response from OpenAI API: %w", err)
@@ -289,4 +314,22 @@ func ConvertSchemaDefinition(schema *minds.Definition) (*jsonschema.Definition, 
 	}
 
 	return &result, nil
+}
+
+// For testing purposes - exported to be visible in tests
+func GetOptionsFromAskOptions(opts ...Option) *options {
+	o := &options{
+		model: getDefaultModel(),
+	}
+
+	for _, opt := range opts {
+		opt(o)
+	}
+
+	// If API key wasn't provided in options, try to get from environment
+	if o.apiKey == "" {
+		o.apiKey = os.Getenv("OPENAI_API_KEY")
+	}
+
+	return o
 }
