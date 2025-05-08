@@ -22,6 +22,8 @@ const (
 	O4Mini = "o4-mini" // $1.10 input	$0.275 cached output	$4.40 output
 	O3Mini = "o3-mini" // $1.10 input	$0.55 cached output		$4.40 output
 
+	openaiAPIURLv1 = "https://api.openai.com/v1"
+
 	MockModel = "mock-model"
 
 	maxResponseTokens = 1000
@@ -35,13 +37,27 @@ type Option func(*options)
 
 // options holds all configurable options for LLM requests
 type options struct {
-	model string
+	model   string
+	baseURL string
+	apiKey  string
 }
 
 // WithModel returns an Option that sets the model to use
 func WithModel(model string) Option {
 	return func(o *options) {
 		o.model = model
+	}
+}
+
+func WithBaseURL(baseURL string) Option {
+	return func(o *options) {
+		o.baseURL = baseURL
+	}
+}
+
+func WithAPIKey(apiKey string) Option {
+	return func(o *options) {
+		o.apiKey = apiKey
 	}
 }
 
@@ -71,7 +87,7 @@ func Ask(ctx context.Context, prompt string, opts ...Option) (string, error) {
 
 	switch o.model {
 	case GPT41Nano, GPT41Mini, GPT41, GPT4oMini, O4Mini, O3Mini:
-		return AskOpenAI(ctx, prompt, WithModel(o.model))
+		return AskOpenAI(ctx, prompt, WithModel(o.model), WithBaseURL(o.baseURL), WithAPIKey(o.apiKey))
 	case MockModel:
 		return MockLLMResponse, nil
 	default:
@@ -84,22 +100,31 @@ func Ask(ctx context.Context, prompt string, opts ...Option) (string, error) {
 func AskOpenAI(ctx context.Context, prompt string, opts ...Option) (string, error) {
 	// Process options
 	o := &options{
-		model: os.Getenv("OPENAI_DEFAULT_MODEL"),
+		model:   os.Getenv("OPENAI_DEFAULT_MODEL"),
+		baseURL: os.Getenv("OPENAI_BASE_URL"),
+		apiKey:  os.Getenv("OPENAI_API_KEY"),
 	}
 
 	if o.model == "" {
 		o.model = GPT41Nano
 	}
 
+	if o.baseURL == "" {
+		o.baseURL = openaiAPIURLv1
+	}
+
 	for _, opt := range opts {
 		opt(o)
 	}
 
-	if os.Getenv("OPENAI_API_KEY") == "" {
+	if o.apiKey == "" {
 		return "", fmt.Errorf("OPENAI_API_KEY is not set")
 	}
 
-	client := openai.NewClient(os.Getenv("OPENAI_API_KEY"))
+	config := openai.DefaultConfig(o.apiKey)
+	config.BaseURL = o.baseURL
+
+	client := openai.NewClientWithConfig(config)
 	resp, err := client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
 		Model:     o.model,
 		Messages:  []openai.ChatCompletionMessage{{Role: openai.ChatMessageRoleUser, Content: prompt}},
@@ -145,27 +170,36 @@ func StructuredAskOpenAI[T any](ctx context.Context, name, prompt string, opts .
 
 	// Process options
 	o := &options{
-		model: os.Getenv("OPENAI_DEFAULT_MODEL"),
+		model:   os.Getenv("OPENAI_DEFAULT_MODEL"),
+		baseURL: os.Getenv("OPENAI_BASE_URL"),
+		apiKey:  os.Getenv("OPENAI_API_KEY"),
 	}
 
 	if o.model == "" {
 		o.model = GPT41Nano
 	}
 
+	if o.baseURL == "" {
+		o.baseURL = openaiAPIURLv1
+	}
+
 	for _, opt := range opts {
 		opt(o)
 	}
 
-	if os.Getenv("OPENAI_API_KEY") == "" {
+	if o.apiKey == "" {
 		return zero, fmt.Errorf("OPENAI_API_KEY is not set")
 	}
+
+	config := openai.DefaultConfig(o.apiKey)
+	config.BaseURL = o.baseURL
 
 	schema, err := GenerateJSONSchema(zero)
 	if err != nil {
 		return zero, fmt.Errorf("failed to generate schema: %w", err)
 	}
 
-	client := openai.NewClient(os.Getenv("OPENAI_API_KEY"))
+	client := openai.NewClientWithConfig(config)
 	resp, err := client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
 		Model:     o.model,
 		Messages:  []openai.ChatCompletionMessage{{Role: openai.ChatMessageRoleUser, Content: prompt}},
