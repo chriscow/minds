@@ -179,9 +179,10 @@ func StructuredAsk[T any](ctx context.Context, name, prompt string, opts ...Opti
 		return StructuredAskOpenAI[T](ctx, name, prompt, opts...)
 	case DeepSeekChat, DeepSeekReasoner:
 		// For DeepSeek models, we need to ensure the base URL is set correctly
-		o.apiKey = os.Getenv("DEEPSEEK_API_KEY")
-		o.baseURL = DeepSeekAPIURL
-		return StructuredAskOpenAI[T](ctx, name, prompt, WithModel(o.model), WithBaseURL(o.baseURL), WithAPIKey(o.apiKey))
+		// Create a new options slice with the DeepSeek base URL
+		deepSeekOpts := append([]Option{}, opts...)
+		deepSeekOpts = append(deepSeekOpts, WithBaseURL(DeepSeekAPIURL), WithAPIKey(os.Getenv("DEEPSEEK_API_KEY")))
+		return StructuredAskOpenAI[T](ctx, name, prompt, deepSeekOpts...)
 	case MockModel:
 		if err := json.Unmarshal([]byte(MockLLMResponse), &zero); err != nil {
 			return zero, fmt.Errorf("failed to unmarshal mock response: %w", err)
@@ -246,7 +247,7 @@ func StructuredAskOpenAI[T any](ctx context.Context, name, prompt string, opts .
 	resp, err := client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
 		Model:          o.model,
 		Messages:       []openai.ChatCompletionMessage{{Role: openai.ChatMessageRoleUser, Content: prompt}},
-		MaxTokens:      maxResponseTokens,
+		MaxTokens:      o.maxTokens,
 		ResponseFormat: &responseFormat,
 	})
 	if err != nil {
