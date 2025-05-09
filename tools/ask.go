@@ -43,15 +43,22 @@ type Option func(*options)
 
 // options holds all configurable options for LLM requests
 type options struct {
-	model   string
-	baseURL string
-	apiKey  string
+	model     string
+	baseURL   string
+	apiKey    string
+	maxTokens int
 }
 
 // WithModel returns an Option that sets the model to use
 func WithModel(model string) Option {
 	return func(o *options) {
 		o.model = model
+	}
+}
+
+func WithMaxTokens(maxTokens int) Option {
+	return func(o *options) {
+		o.maxTokens = maxTokens
 	}
 }
 
@@ -84,7 +91,8 @@ func getDefaultModel() string {
 func Ask(ctx context.Context, prompt string, opts ...Option) (string, error) {
 	// Process options only to determine the model
 	o := &options{
-		model: getDefaultModel(),
+		model:     getDefaultModel(),
+		maxTokens: maxResponseTokens,
 	}
 
 	for _, opt := range opts {
@@ -114,9 +122,10 @@ func Ask(ctx context.Context, prompt string, opts ...Option) (string, error) {
 func AskOpenAI(ctx context.Context, prompt string, opts ...Option) (string, error) {
 	// Process options
 	o := &options{
-		model:   os.Getenv("OPENAI_DEFAULT_MODEL"),
-		baseURL: os.Getenv("OPENAI_BASE_URL"),
-		apiKey:  os.Getenv("OPENAI_API_KEY"),
+		model:     os.Getenv("OPENAI_DEFAULT_MODEL"),
+		baseURL:   os.Getenv("OPENAI_BASE_URL"),
+		apiKey:    os.Getenv("OPENAI_API_KEY"),
+		maxTokens: maxResponseTokens,
 	}
 
 	if o.model == "" {
@@ -142,7 +151,7 @@ func AskOpenAI(ctx context.Context, prompt string, opts ...Option) (string, erro
 	resp, err := client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
 		Model:     o.model,
 		Messages:  []openai.ChatCompletionMessage{{Role: openai.ChatMessageRoleUser, Content: prompt}},
-		MaxTokens: maxResponseTokens,
+		MaxTokens: o.maxTokens,
 	})
 	if err != nil {
 		return "", fmt.Errorf("failed to get response from OpenAI API: %w", err)
@@ -155,7 +164,8 @@ func AskOpenAI(ctx context.Context, prompt string, opts ...Option) (string, erro
 func StructuredAsk[T any](ctx context.Context, name, prompt string, opts ...Option) (T, error) {
 	// Process options only to determine the model
 	o := &options{
-		model: getDefaultModel(),
+		model:     getDefaultModel(),
+		maxTokens: maxResponseTokens,
 	}
 
 	for _, opt := range opts {
@@ -189,9 +199,10 @@ func StructuredAskOpenAI[T any](ctx context.Context, name, prompt string, opts .
 
 	// Process options
 	o := &options{
-		model:   os.Getenv("OPENAI_DEFAULT_MODEL"),
-		baseURL: os.Getenv("OPENAI_BASE_URL"),
-		apiKey:  os.Getenv("OPENAI_API_KEY"),
+		model:     os.Getenv("OPENAI_DEFAULT_MODEL"),
+		baseURL:   os.Getenv("OPENAI_BASE_URL"),
+		apiKey:    os.Getenv("OPENAI_API_KEY"),
+		maxTokens: maxResponseTokens,
 	}
 
 	if o.model == "" {
