@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 
 	"github.com/chriscow/minds"
 
@@ -43,10 +44,12 @@ type Option func(*options)
 
 // options holds all configurable options for LLM requests
 type options struct {
-	model     string
-	baseURL   string
-	apiKey    string
-	maxTokens int
+	model         string
+	baseURL       string
+	apiKey        string
+	maxTokens     int
+	systemMessage string
+	prefill       string
 }
 
 // WithModel returns an Option that sets the model to use
@@ -71,6 +74,18 @@ func WithBaseURL(baseURL string) Option {
 func WithAPIKey(apiKey string) Option {
 	return func(o *options) {
 		o.apiKey = apiKey
+	}
+}
+
+func WithSystemMessage(systemMessage string) Option {
+	return func(o *options) {
+		o.systemMessage = systemMessage
+	}
+}
+
+func WithPrefill(prefill string) Option {
+	return func(o *options) {
+		o.prefill = prefill
 	}
 }
 
@@ -106,8 +121,9 @@ func Ask(ctx context.Context, prompt string, opts ...Option) (string, error) {
 	case DeepSeekChat, DeepSeekReasoner:
 		// For DeepSeek models, we need to ensure the base URL is set correctly
 		// Create a new options slice with the DeepSeek base URL
-		deepSeekOpts := append([]Option{}, opts...)
-		deepSeekOpts = append(deepSeekOpts, WithBaseURL(DeepSeekAPIURL), WithAPIKey(os.Getenv("DEEPSEEK_API_KEY")))
+		deepSeekOpts := slices.Clone(opts)
+		key := os.Getenv("DEEPSEEK_API_KEY")
+		deepSeekOpts = append(deepSeekOpts, WithBaseURL(DeepSeekAPIURL), WithAPIKey(key))
 		return AskOpenAI(ctx, prompt, deepSeekOpts...)
 
 	case MockModel:
@@ -147,10 +163,32 @@ func AskOpenAI(ctx context.Context, prompt string, opts ...Option) (string, erro
 	config := openai.DefaultConfig(o.apiKey)
 	config.BaseURL = o.baseURL
 
+	messages := []openai.ChatCompletionMessage{}
+
+	if o.systemMessage != "" {
+		messages = append(messages, openai.ChatCompletionMessage{
+			Role:    openai.ChatMessageRoleSystem,
+			Content: o.systemMessage,
+		})
+	}
+
+	// Actual prompt goes before the prefill
+	messages = append(messages, openai.ChatCompletionMessage{
+		Role:    openai.ChatMessageRoleUser,
+		Content: prompt,
+	})
+
+	if o.prefill != "" {
+		messages = append(messages, openai.ChatCompletionMessage{
+			Role:    openai.ChatMessageRoleAssistant,
+			Content: o.prefill,
+		})
+	}
+
 	client := openai.NewClientWithConfig(config)
 	resp, err := client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
 		Model:     o.model,
-		Messages:  []openai.ChatCompletionMessage{{Role: openai.ChatMessageRoleUser, Content: prompt}},
+		Messages:  messages,
 		MaxTokens: o.maxTokens,
 	})
 	if err != nil {
@@ -243,10 +281,30 @@ func StructuredAskOpenAI[T any](ctx context.Context, name, prompt string, opts .
 		responseFormat.JSONSchema = nil
 	}
 
+	messages := []openai.ChatCompletionMessage{}
+	if o.systemMessage != "" {
+		messages = append(messages, openai.ChatCompletionMessage{
+			Role:    openai.ChatMessageRoleSystem,
+			Content: o.systemMessage,
+		})
+	}
+
+	messages = append(messages, openai.ChatCompletionMessage{
+		Role:    openai.ChatMessageRoleUser,
+		Content: prompt,
+	})
+
+	if o.prefill != "" {
+		messages = append(messages, openai.ChatCompletionMessage{
+			Role:    openai.ChatMessageRoleAssistant,
+			Content: o.prefill,
+		})
+	}
+
 	client := openai.NewClientWithConfig(config)
 	resp, err := client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
 		Model:          o.model,
-		Messages:       []openai.ChatCompletionMessage{{Role: openai.ChatMessageRoleUser, Content: prompt}},
+		Messages:       messages,
 		MaxTokens:      o.maxTokens,
 		ResponseFormat: &responseFormat,
 	})
