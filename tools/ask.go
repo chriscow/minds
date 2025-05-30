@@ -49,10 +49,6 @@ type options struct {
 	apiKey    string
 	maxTokens int
 	messages  minds.Messages
-	// Track which options were explicitly set
-	explicitModel     bool
-	explicitMaxTokens bool
-	explicitMessages  bool
 }
 
 func IsDeepSeekModel(model string) bool {
@@ -68,14 +64,12 @@ func IsOpenAIModel(model string) bool {
 func WithModel(model string) Option {
 	return func(o *options) {
 		o.model = model
-		o.explicitModel = true
 	}
 }
 
 func WithMaxTokens(maxTokens int) Option {
 	return func(o *options) {
 		o.maxTokens = maxTokens
-		o.explicitMaxTokens = true
 	}
 }
 
@@ -91,34 +85,9 @@ func WithAPIKey(apiKey string) Option {
 	}
 }
 
-func WithSystemMessage(systemMessage string) Option {
-	return func(o *options) {
-		// Convert system message to a minds.Message and prepend to messages
-		systemMsg := minds.Message{
-			Role:    minds.RoleSystem,
-			Content: systemMessage,
-		}
-		o.messages = append(minds.Messages{systemMsg}, o.messages...)
-		o.explicitMessages = true
-	}
-}
-
-func WithPrefill(prefill string) Option {
-	return func(o *options) {
-		// Add prefill as an assistant message at the end
-		prefillMsg := minds.Message{
-			Role:    minds.RoleAssistant,
-			Content: prefill,
-		}
-		o.messages = append(o.messages, prefillMsg)
-		o.explicitMessages = true
-	}
-}
-
 func WithMessages(messages minds.Messages) Option {
 	return func(o *options) {
 		o.messages = messages
-		o.explicitMessages = true
 	}
 }
 
@@ -208,11 +177,10 @@ func AskOpenAI(ctx context.Context, prompt string, opts ...Option) (string, erro
 
 	var messages []openai.ChatCompletionMessage
 
-	if o.explicitMessages {
+	if o.messages != nil && len(o.messages) > 0 {
 		// Use the provided messages
 		messages = convertToOpenAIMessages(o.messages)
 	} else {
-		// Build messages from the prompt
 		messages = []openai.ChatCompletionMessage{
 			{
 				Role:    openai.ChatMessageRoleUser,
@@ -342,7 +310,7 @@ func StructuredAskOpenAI[T any](ctx context.Context, name, prompt string, opts .
 
 	var messages []openai.ChatCompletionMessage
 
-	if o.explicitMessages {
+	if o.messages != nil && len(o.messages) > 0 {
 		// Use the provided messages
 		messages = convertToOpenAIMessages(o.messages)
 	} else {
@@ -448,8 +416,8 @@ func ConvertSchemaDefinition(schema *minds.Definition) (*jsonschema.Definition, 
 	return &result, nil
 }
 
-// For testing purposes - exported to be visible in tests
-func GetOptionsFromAskOptions(opts ...Option) *options {
+// For testing purposes
+func getOptionsFromAskOptions(opts ...Option) *options {
 	o := &options{
 		model: getDefaultModel(),
 	}
@@ -467,7 +435,7 @@ func GetOptionsFromAskOptions(opts ...Option) *options {
 }
 
 // validateOptions checks for conflicting options when WithMessages is used
-func validateOptions(o *options) error {
+func validateOptions(_ *options) error {
 	// WithMessages is compatible with all other options since it just provides
 	// the message thread. Model and maxTokens are still relevant.
 	return nil
@@ -476,21 +444,21 @@ func validateOptions(o *options) error {
 // convertToOpenAIMessages converts minds.Messages to OpenAI chat completion messages
 func convertToOpenAIMessages(mindsMessages minds.Messages) []openai.ChatCompletionMessage {
 	var messages []openai.ChatCompletionMessage
-	
+
 	for _, msg := range mindsMessages {
 		openaiMsg := openai.ChatCompletionMessage{
 			Role:    string(msg.Role),
 			Content: msg.Content,
 		}
-		
+
 		if msg.Name != "" {
 			openaiMsg.Name = msg.Name
 		}
-		
+
 		if msg.ToolCallID != "" {
 			openaiMsg.ToolCallID = msg.ToolCallID
 		}
-		
+
 		// Convert ToolCalls if present
 		if len(msg.ToolCalls) > 0 {
 			openaiToolCalls := make([]openai.ToolCall, len(msg.ToolCalls))
@@ -506,9 +474,9 @@ func convertToOpenAIMessages(mindsMessages minds.Messages) []openai.ChatCompleti
 			}
 			openaiMsg.ToolCalls = openaiToolCalls
 		}
-		
+
 		messages = append(messages, openaiMsg)
 	}
-	
+
 	return messages
 }
