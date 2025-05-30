@@ -208,7 +208,7 @@ func AskOpenAI(ctx context.Context, prompt string, opts ...Option) (string, erro
 			llm = "DeepSeek"
 		}
 
-		return "", fmt.Errorf("AskOpenAI: %s API: %w. baseURL:%s maxTokens:%d model:%s", llm, err, o.baseURL, o.maxTokens, o.model)
+		return "", fmt.Errorf("AskOpenAI: %s API: %w. baseURL:%s maxTokens:%d model:%s key:%s", llm, err, o.baseURL, o.maxTokens, o.model, o.apiKey[0:5]+"...") // Mask API key in error message
 	}
 
 	if len(resp.Choices) == 0 {
@@ -347,7 +347,7 @@ func StructuredAskOpenAI[T any](ctx context.Context, name, prompt string, opts .
 			llm = "DeepSeek"
 		}
 
-		return zero, fmt.Errorf("StructuredAskOpenAI: %s API: %w. baseURL:%s maxTokens:%d model:%s", llm, err, o.baseURL, o.maxTokens, o.model)
+		return zero, fmt.Errorf("StructuredAskOpenAI: %s API: %w. baseURL:%s maxTokens:%d model:%s key:%s", llm, err, o.baseURL, o.maxTokens, o.model, o.apiKey[0:5]+"...") // Mask API key in error message
 	}
 
 	var result T
