@@ -52,6 +52,15 @@ type options struct {
 	prefill       string
 }
 
+func IsDeepSeekModel(model string) bool {
+	return model == DeepSeekChat || model == DeepSeekReasoner
+}
+
+func IsOpenAIModel(model string) bool {
+	return model == GPT41Nano || model == GPT41Mini || model == GPT41 ||
+		model == GPT4oMini || model == O4Mini || model == O3Mini
+}
+
 // WithModel returns an Option that sets the model to use
 func WithModel(model string) Option {
 	return func(o *options) {
@@ -157,7 +166,7 @@ func AskOpenAI(ctx context.Context, prompt string, opts ...Option) (string, erro
 	}
 
 	if o.apiKey == "" {
-		return "", fmt.Errorf("OPENAI_API_KEY is not set")
+		return "", fmt.Errorf("AskOpenAI: API key is not set")
 	}
 
 	config := openai.DefaultConfig(o.apiKey)
@@ -192,7 +201,17 @@ func AskOpenAI(ctx context.Context, prompt string, opts ...Option) (string, erro
 		MaxTokens: o.maxTokens,
 	})
 	if err != nil {
-		return "", fmt.Errorf("failed to get response from OpenAI API: %w", err)
+		llm := "OpenAI"
+
+		if IsDeepSeekModel(o.model) {
+			llm = "DeepSeek"
+		}
+
+		return "", fmt.Errorf("AskOpenAI: %s API: %w. baseURL:%s maxTokens:%d model:%s systemMsg:%d", llm, err, o.baseURL, o.maxTokens, o.model, len(o.systemMessage))
+	}
+
+	if len(resp.Choices) == 0 {
+		return "", fmt.Errorf("no choices returned from LLM API")
 	}
 	return resp.Choices[0].Message.Content, nil
 }
@@ -265,7 +284,7 @@ func StructuredAskOpenAI[T any](ctx context.Context, name, prompt string, opts .
 
 	schema, err := GenerateJSONSchema(zero)
 	if err != nil {
-		return zero, fmt.Errorf("failed to generate schema: %w", err)
+		return zero, fmt.Errorf("StructuredAskOpenAI: %w", err)
 	}
 
 	responseFormat := openai.ChatCompletionResponseFormat{
@@ -309,12 +328,18 @@ func StructuredAskOpenAI[T any](ctx context.Context, name, prompt string, opts .
 		ResponseFormat: &responseFormat,
 	})
 	if err != nil {
-		return zero, fmt.Errorf("failed to get response from OpenAI API: %w", err)
+		llm := "OpenAI"
+
+		if IsDeepSeekModel(o.model) {
+			llm = "DeepSeek"
+		}
+
+		return zero, fmt.Errorf("StructuredAskOpenAI: %s API: %w. baseURL:%s maxTokens:%d model:%s systemMsg:%d", llm, err, o.baseURL, o.maxTokens, o.model, len(o.systemMessage))
 	}
 
 	var result T
 	if err := json.Unmarshal([]byte(resp.Choices[0].Message.Content), &result); err != nil {
-		return zero, fmt.Errorf("failed to unmarshal response: %w", err)
+		return zero, fmt.Errorf("StructuredAskOpenAI: failed to unmarshal response: %w. content:%s", err, resp.Choices[0].Message.Content)
 	}
 	return result, nil
 }
@@ -322,7 +347,7 @@ func StructuredAskOpenAI[T any](ctx context.Context, name, prompt string, opts .
 func GenerateJSONSchema(v any) (*jsonschema.Definition, error) {
 	schema, err := minds.GenerateSchema(v)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate schema: %w", err)
+		return nil, fmt.Errorf("GenerateJSONSchema: %w", err)
 	}
 
 	return ConvertSchemaDefinition(schema)
@@ -368,7 +393,7 @@ func ConvertSchemaDefinition(schema *minds.Definition) (*jsonschema.Definition, 
 		for key, prop := range schema.Properties {
 			propCopy, err := ConvertSchemaDefinition(&prop)
 			if err != nil {
-				return nil, fmt.Errorf("failed to convert property %s: %w", key, err)
+				return nil, fmt.Errorf("ConvertSchemaDefinition: %s: %w", key, err)
 			}
 			result.Properties[key] = *propCopy
 		}
@@ -378,7 +403,7 @@ func ConvertSchemaDefinition(schema *minds.Definition) (*jsonschema.Definition, 
 	if schema.Items != nil {
 		itemsCopy, err := ConvertSchemaDefinition(schema.Items)
 		if err != nil {
-			return nil, fmt.Errorf("failed to convert items: %w", err)
+			return nil, fmt.Errorf("ConvertSchemaDefinition: failed to convert items: %w", err)
 		}
 		result.Items = itemsCopy
 	}
