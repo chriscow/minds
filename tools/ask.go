@@ -44,12 +44,15 @@ type Option func(*options)
 
 // options holds all configurable options for LLM requests
 type options struct {
-	model         string
-	baseURL       string
-	apiKey        string
-	maxTokens     int
-	systemMessage string
-	prefill       string
+	model     string
+	baseURL   string
+	apiKey    string
+	maxTokens int
+	messages  minds.Messages
+	// Track which options were explicitly set
+	explicitModel     bool
+	explicitMaxTokens bool
+	explicitMessages  bool
 }
 
 func IsDeepSeekModel(model string) bool {
@@ -65,12 +68,14 @@ func IsOpenAIModel(model string) bool {
 func WithModel(model string) Option {
 	return func(o *options) {
 		o.model = model
+		o.explicitModel = true
 	}
 }
 
 func WithMaxTokens(maxTokens int) Option {
 	return func(o *options) {
 		o.maxTokens = maxTokens
+		o.explicitMaxTokens = true
 	}
 }
 
@@ -88,13 +93,32 @@ func WithAPIKey(apiKey string) Option {
 
 func WithSystemMessage(systemMessage string) Option {
 	return func(o *options) {
-		o.systemMessage = systemMessage
+		// Convert system message to a minds.Message and prepend to messages
+		systemMsg := minds.Message{
+			Role:    minds.RoleSystem,
+			Content: systemMessage,
+		}
+		o.messages = append(minds.Messages{systemMsg}, o.messages...)
+		o.explicitMessages = true
 	}
 }
 
 func WithPrefill(prefill string) Option {
 	return func(o *options) {
-		o.prefill = prefill
+		// Add prefill as an assistant message at the end
+		prefillMsg := minds.Message{
+			Role:    minds.RoleAssistant,
+			Content: prefill,
+		}
+		o.messages = append(o.messages, prefillMsg)
+		o.explicitMessages = true
+	}
+}
+
+func WithMessages(messages minds.Messages) Option {
+	return func(o *options) {
+		o.messages = messages
+		o.explicitMessages = true
 	}
 }
 
@@ -121,6 +145,11 @@ func Ask(ctx context.Context, prompt string, opts ...Option) (string, error) {
 
 	for _, opt := range opts {
 		opt(o)
+	}
+
+	// Validate options for conflicts
+	if err := validateOptions(o); err != nil {
+		return "", err
 	}
 
 	switch o.model {
@@ -165,6 +194,11 @@ func AskOpenAI(ctx context.Context, prompt string, opts ...Option) (string, erro
 		opt(o)
 	}
 
+	// Validate options for conflicts
+	if err := validateOptions(o); err != nil {
+		return "", err
+	}
+
 	if o.apiKey == "" {
 		return "", fmt.Errorf("AskOpenAI: API key is not set")
 	}
@@ -172,34 +206,29 @@ func AskOpenAI(ctx context.Context, prompt string, opts ...Option) (string, erro
 	config := openai.DefaultConfig(o.apiKey)
 	config.BaseURL = o.baseURL
 
-	messages := []openai.ChatCompletionMessage{}
+	var messages []openai.ChatCompletionMessage
 
-	if o.systemMessage != "" {
-		messages = append(messages, openai.ChatCompletionMessage{
-			Role:    openai.ChatMessageRoleSystem,
-			Content: o.systemMessage,
-		})
+	if o.explicitMessages {
+		// Use the provided messages
+		messages = convertToOpenAIMessages(o.messages)
+	} else {
+		// Build messages from the prompt
+		messages = []openai.ChatCompletionMessage{
+			{
+				Role:    openai.ChatMessageRoleUser,
+				Content: prompt,
+			},
+		}
 	}
 
-	// Actual prompt goes before the prefill
-	messages = append(messages, openai.ChatCompletionMessage{
-		Role:    openai.ChatMessageRoleUser,
-		Content: prompt,
-	})
-
-	if o.prefill != "" {
-		messages = append(messages, openai.ChatCompletionMessage{
-			Role:    openai.ChatMessageRoleAssistant,
-			Content: o.prefill,
-		})
-	}
-
-	client := openai.NewClientWithConfig(config)
-	resp, err := client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
+	req := &openai.ChatCompletionRequest{
 		Model:     o.model,
 		Messages:  messages,
 		MaxTokens: o.maxTokens,
-	})
+	}
+
+	client := openai.NewClientWithConfig(config)
+	resp, err := client.CreateChatCompletion(ctx, *req)
 	if err != nil {
 		llm := "OpenAI"
 
@@ -207,7 +236,7 @@ func AskOpenAI(ctx context.Context, prompt string, opts ...Option) (string, erro
 			llm = "DeepSeek"
 		}
 
-		return "", fmt.Errorf("AskOpenAI: %s API: %w. baseURL:%s maxTokens:%d model:%s systemMsg:%d", llm, err, o.baseURL, o.maxTokens, o.model, len(o.systemMessage))
+		return "", fmt.Errorf("AskOpenAI: %s API: %w. baseURL:%s maxTokens:%d model:%s", llm, err, o.baseURL, o.maxTokens, o.model)
 	}
 
 	if len(resp.Choices) == 0 {
@@ -227,6 +256,12 @@ func StructuredAsk[T any](ctx context.Context, name, prompt string, opts ...Opti
 
 	for _, opt := range opts {
 		opt(o)
+	}
+
+	// Validate options for conflicts
+	if err := validateOptions(o); err != nil {
+		var zero T
+		return zero, err
 	}
 
 	var zero T // Zero value to return in error cases
@@ -275,6 +310,11 @@ func StructuredAskOpenAI[T any](ctx context.Context, name, prompt string, opts .
 		opt(o)
 	}
 
+	// Validate options for conflicts
+	if err := validateOptions(o); err != nil {
+		return zero, err
+	}
+
 	if o.apiKey == "" {
 		return zero, fmt.Errorf("OPENAI_API_KEY is not set")
 	}
@@ -300,33 +340,30 @@ func StructuredAskOpenAI[T any](ctx context.Context, name, prompt string, opts .
 		responseFormat.JSONSchema = nil
 	}
 
-	messages := []openai.ChatCompletionMessage{}
-	if o.systemMessage != "" {
-		messages = append(messages, openai.ChatCompletionMessage{
-			Role:    openai.ChatMessageRoleSystem,
-			Content: o.systemMessage,
-		})
+	var messages []openai.ChatCompletionMessage
+
+	if o.explicitMessages {
+		// Use the provided messages
+		messages = convertToOpenAIMessages(o.messages)
+	} else {
+		// Build messages from the prompt
+		messages = []openai.ChatCompletionMessage{
+			{
+				Role:    openai.ChatMessageRoleUser,
+				Content: prompt,
+			},
+		}
 	}
 
-	messages = append(messages, openai.ChatCompletionMessage{
-		Role:    openai.ChatMessageRoleUser,
-		Content: prompt,
-	})
-
-	if o.prefill != "" {
-		messages = append(messages, openai.ChatCompletionMessage{
-			Role:    openai.ChatMessageRoleAssistant,
-			Content: o.prefill,
-		})
-	}
-
-	client := openai.NewClientWithConfig(config)
-	resp, err := client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
+	req := &openai.ChatCompletionRequest{
 		Model:          o.model,
 		Messages:       messages,
 		MaxTokens:      o.maxTokens,
 		ResponseFormat: &responseFormat,
-	})
+	}
+
+	client := openai.NewClientWithConfig(config)
+	resp, err := client.CreateChatCompletion(ctx, *req)
 	if err != nil {
 		llm := "OpenAI"
 
@@ -334,7 +371,7 @@ func StructuredAskOpenAI[T any](ctx context.Context, name, prompt string, opts .
 			llm = "DeepSeek"
 		}
 
-		return zero, fmt.Errorf("StructuredAskOpenAI: %s API: %w. baseURL:%s maxTokens:%d model:%s systemMsg:%d", llm, err, o.baseURL, o.maxTokens, o.model, len(o.systemMessage))
+		return zero, fmt.Errorf("StructuredAskOpenAI: %s API: %w. baseURL:%s maxTokens:%d model:%s", llm, err, o.baseURL, o.maxTokens, o.model)
 	}
 
 	var result T
@@ -427,4 +464,51 @@ func GetOptionsFromAskOptions(opts ...Option) *options {
 	}
 
 	return o
+}
+
+// validateOptions checks for conflicting options when WithMessages is used
+func validateOptions(o *options) error {
+	// WithMessages is compatible with all other options since it just provides
+	// the message thread. Model and maxTokens are still relevant.
+	return nil
+}
+
+// convertToOpenAIMessages converts minds.Messages to OpenAI chat completion messages
+func convertToOpenAIMessages(mindsMessages minds.Messages) []openai.ChatCompletionMessage {
+	var messages []openai.ChatCompletionMessage
+	
+	for _, msg := range mindsMessages {
+		openaiMsg := openai.ChatCompletionMessage{
+			Role:    string(msg.Role),
+			Content: msg.Content,
+		}
+		
+		if msg.Name != "" {
+			openaiMsg.Name = msg.Name
+		}
+		
+		if msg.ToolCallID != "" {
+			openaiMsg.ToolCallID = msg.ToolCallID
+		}
+		
+		// Convert ToolCalls if present
+		if len(msg.ToolCalls) > 0 {
+			openaiToolCalls := make([]openai.ToolCall, len(msg.ToolCalls))
+			for i, tc := range msg.ToolCalls {
+				openaiToolCalls[i] = openai.ToolCall{
+					ID:   tc.ID,
+					Type: openai.ToolType(tc.Type),
+					Function: openai.FunctionCall{
+						Name:      tc.Function.Name,
+						Arguments: string(tc.Function.Parameters),
+					},
+				}
+			}
+			openaiMsg.ToolCalls = openaiToolCalls
+		}
+		
+		messages = append(messages, openaiMsg)
+	}
+	
+	return messages
 }
