@@ -177,9 +177,13 @@ func AskOpenAI(ctx context.Context, prompt string, opts ...Option) (string, erro
 
 	var messages []openai.ChatCompletionMessage
 
-	if o.messages != nil && len(o.messages) > 0 {
+	if len(o.messages) > 0 {
 		// Use the provided messages
 		messages = convertToOpenAIMessages(o.messages)
+		messages = append(messages, openai.ChatCompletionMessage{
+			Role:    openai.ChatMessageRoleUser,
+			Content: prompt,
+		})
 	} else {
 		messages = []openai.ChatCompletionMessage{
 			{
@@ -310,9 +314,13 @@ func StructuredAskOpenAI[T any](ctx context.Context, name, prompt string, opts .
 
 	var messages []openai.ChatCompletionMessage
 
-	if o.messages != nil && len(o.messages) > 0 {
+	if len(o.messages) > 0 {
 		// Use the provided messages
 		messages = convertToOpenAIMessages(o.messages)
+		messages = append(messages, openai.ChatCompletionMessage{
+			Role:    openai.ChatMessageRoleUser,
+			Content: prompt,
+		})
 	} else {
 		// Build messages from the prompt
 		messages = []openai.ChatCompletionMessage{
