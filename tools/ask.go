@@ -239,7 +239,7 @@ func StructuredAsk[T any](ctx context.Context, prompt string, opts ...Option) (T
 
 	var zero T // Zero value to return in error cases
 	t := reflect.TypeOf(zero)
-	if t.Kind() != reflect.Ptr {
+	if t.Kind() == reflect.Ptr {
 		t = t.Elem()
 	}
 	name := t.Name()
