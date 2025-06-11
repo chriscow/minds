@@ -126,7 +126,7 @@ func TestStructuredAsk(t *testing.T) {
 		Answer string `json:"answer"`
 	}
 
-	response, err := StructuredAsk[result](context.Background(), "answer", "What is the capital of the moon?")
+	response, err := StructuredAsk[result](context.Background(), "What is the capital of the moon?", WithModel(MockModel))
 	if err != nil {
 		t.Fatalf("failed to ask: %v", err)
 	}
@@ -138,7 +138,7 @@ func TestStructuredAsk(t *testing.T) {
 
 	// Test with explicit WithModel
 	os.Setenv("LLM_DEFAULT_MODEL", "something-else")
-	response, err = StructuredAsk[result](context.Background(), "answer", "What is the capital of the moon?", WithModel(MockModel))
+	response, err = StructuredAsk[result](context.Background(), "What is the capital of the moon?", WithModel(MockModel))
 	if err != nil {
 		t.Fatalf("failed to ask with explicit model: %v", err)
 	}
@@ -149,7 +149,7 @@ func TestStructuredAsk(t *testing.T) {
 
 	// Test unknown model error
 	var emptyResponse result
-	response, err = StructuredAsk[result](context.Background(), "answer", "prompt", WithModel("unknown-model"))
+	response, err = StructuredAsk[result](context.Background(), "prompt", WithModel("unknown-model"))
 	if err == nil {
 		t.Fatal("expected error for unknown model, got nil")
 	}
@@ -172,7 +172,7 @@ func TestStructuredAskIntegration(t *testing.T) {
 		LuckyNumber int `json:"lucky_number"`
 	}
 
-	response, err := StructuredAsk[result](context.Background(), "lucky_number", "What is today's lucky number greater than 0?")
+	response, err := StructuredAsk[result](context.Background(), "What is today's lucky number greater than 0?", WithModel(DeepSeekChat))
 	if err != nil {
 		t.Fatalf("failed to ask: %v", err)
 	}
@@ -182,7 +182,7 @@ func TestStructuredAskIntegration(t *testing.T) {
 	}
 
 	// test with deepseek
-	response, err = StructuredAsk[result](context.Background(), "lucky_number", "What is today's lucky number greater than 0? Respond in JSON.", WithModel(DeepSeekChat))
+	response, err = StructuredAsk[result](context.Background(), "What is today's lucky number greater than 0? Respond in JSON.", WithModel(DeepSeekChat))
 	if err != nil {
 		t.Fatalf("failed to ask: %v", err)
 	}
@@ -203,7 +203,7 @@ func TestStructuredAskWithError(t *testing.T) {
 	}
 
 	var emptyResponse result
-	response, err := StructuredAsk[result](context.Background(), "answer", "What is the capital of the moon?")
+	response, err := StructuredAsk[result](context.Background(), "What is the capital of the moon?", WithModel(MockModel))
 	if err == nil {
 		t.Fatalf("expected unmarshal error, got nil")
 	}
@@ -215,7 +215,7 @@ func TestStructuredAskWithError(t *testing.T) {
 	MockLLMResponse = `{"answer": "mock-llm-response"}`
 	MockLLMError = errors.New("mock error")
 
-	_, err = StructuredAsk[result](context.Background(), "answer", "What is the capital of the moon?")
+	_, err = StructuredAsk[result](context.Background(), "What is the capital of the moon?", WithModel(MockModel))
 	if err != MockLLMError {
 		t.Fatalf("expected %v, got %v", MockLLMError, err)
 	}
@@ -405,7 +405,7 @@ func TestWithMessagesIntegration(t *testing.T) {
 			{Role: minds.RoleUser, Content: "Give me an answer."},
 		}
 
-		response, err := StructuredAsk[result](context.Background(), "answer", "This should be ignored", WithMessages(messages))
+		response, err := StructuredAsk[result](context.Background(), "This should be ignored", WithMessages(messages))
 		if err != nil {
 			t.Fatalf("StructuredAsk with WithMessages failed: %v", err)
 		}

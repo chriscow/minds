@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"reflect"
 	"slices"
 
 	"github.com/chriscow/minds"
@@ -27,7 +28,7 @@ const (
 	O3Mini = "o3-mini" // $1.10 input	$0.55 cached input	$4.40 output
 
 	// DeepSeek Chat Discounted UTC 16:30-00:30 50% off    10:30 AM – 6:30 PM Mountain Daylight Time (MDT) Mar-Nov
-	DeepSeekChat = "deepseek-chat" // $0.27 input	$0.07 cached input	$1.10 output
+	DeepSeekChat = "deepseek-chat" // $0.27 ($0.135 discouted) input	$0.07 cached input	$1.10 ($0.550 discounted) output
 	// DeepSeek Reasoner Discounted UTC 16:30-00:30 75% off (same as chat!) 10:30 AM – 6:30 PM Mountain Daylight Time (MDT) Mar-Nov
 	DeepSeekReasoner = "deepseek-reasoner" // $0.55 input $0.14 cached input $2.19 output output
 
@@ -219,7 +220,7 @@ func AskOpenAI(ctx context.Context, prompt string, opts ...Option) (string, erro
 
 // StructuredAsk sends a prompt to an LLM and returns a structured response of type T.
 // It accepts optional WithModel() to specify a model, otherwise uses default.
-func StructuredAsk[T any](ctx context.Context, name, prompt string, opts ...Option) (T, error) {
+func StructuredAsk[T any](ctx context.Context, prompt string, opts ...Option) (T, error) {
 	// Process options only to determine the model
 	o := &options{
 		model:     getDefaultModel(),
@@ -237,6 +238,11 @@ func StructuredAsk[T any](ctx context.Context, name, prompt string, opts ...Opti
 	}
 
 	var zero T // Zero value to return in error cases
+	t := reflect.TypeOf(zero)
+	if t.Kind() != reflect.Ptr {
+		t = t.Elem()
+	}
+	name := t.Name()
 
 	switch o.model {
 	case GPT41Nano, GPT41Mini, GPT41, GPT4oMini, O4Mini, O3Mini:
@@ -259,7 +265,7 @@ func StructuredAsk[T any](ctx context.Context, name, prompt string, opts ...Opti
 
 // StructuredAskOpenAI sends a prompt to OpenAI and returns a structured response of type T.
 // It accepts optional WithModel() to specify a model, otherwise uses default.
-func StructuredAskOpenAI[T any](ctx context.Context, name, prompt string, opts ...Option) (T, error) {
+func StructuredAskOpenAI[T any](ctx context.Context, typeName, prompt string, opts ...Option) (T, error) {
 	var zero T // Zero value to return in error cases
 
 	// Process options
@@ -302,7 +308,7 @@ func StructuredAskOpenAI[T any](ctx context.Context, name, prompt string, opts .
 	responseFormat := openai.ChatCompletionResponseFormat{
 		Type: openai.ChatCompletionResponseFormatTypeJSONSchema,
 		JSONSchema: &openai.ChatCompletionResponseFormatJSONSchema{
-			Name:   name,
+			Name:   typeName,
 			Schema: schema,
 			Strict: true,
 		},
