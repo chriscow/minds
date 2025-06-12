@@ -50,6 +50,7 @@ type options struct {
 	apiKey    string
 	maxTokens int
 	messages  minds.Messages
+	response  *openai.ChatCompletionResponse
 }
 
 func IsDeepSeekModel(model string) bool {
@@ -89,6 +90,12 @@ func WithAPIKey(apiKey string) Option {
 func WithMessages(messages minds.Messages) Option {
 	return func(o *options) {
 		o.messages = messages
+	}
+}
+
+func WantCompletionResponse(response *openai.ChatCompletionResponse) Option {
+	return func(o *options) {
+		o.response = response
 	}
 }
 
@@ -210,6 +217,10 @@ func AskOpenAI(ctx context.Context, prompt string, opts ...Option) (string, erro
 		}
 
 		return "", fmt.Errorf("AskOpenAI: %s API: %w. baseURL:%s maxTokens:%d model:%s key:%s", llm, err, o.baseURL, o.maxTokens, o.model, o.apiKey[0:5]+"...") // Mask API key in error message
+	}
+
+	if o.response != nil {
+		*o.response = resp
 	}
 
 	if len(resp.Choices) == 0 {
