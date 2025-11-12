@@ -66,6 +66,16 @@ F -->|Joke 2| C
 ```
 
 ```go
+// Two LLMs will have a joke telling competition. This example demonstrates setting
+// up a basic workflow with the following elements:
+//
+// - a rate limiter as middleware
+// - two LLM handlers
+// - a simple `printJoke` handler
+// - a "For" handler that will loop over a slice of handlers
+//
+// The key thing is that everything is a ThreadHandler and they can be composed
+// into more complex systems.
 func main() {
 	ctx := context.Background()
 	geminiJoker, _ := gemini.NewProvider(ctx)
@@ -87,9 +97,9 @@ func main() {
 		printJoke,
 	)
 
-    	flow := handlers.ThreadFlow("joke_competition")
-	flow.Use(limiter)
-    	flow.Handle(jokeExchange)
+    flow := handlers.ThreadFlow("joke_competition")
+	flow.Use(limiter) // `Use' adds middleware that is a cross-cutting handler
+    flow.Handle(jokeExchange)
 
 	// Initial prompt
 	prompt := "Tell me a clean, family-friendly joke. Keep it clean and make me laugh!"
